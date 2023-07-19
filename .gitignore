@@ -127,3 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# dataset
+experiments/nuScenes/v1.0-mini/*
