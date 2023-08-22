@@ -98,3 +98,6 @@ To setup the Julia environment and necessary dependencies, navigate to the root 
 
 ### MPC Example ###
 An interactive notebook demonstrating an example of MATS + MPC implementation can be found within the `MPC/MPC_example` directory.
+
+### ZXC notes ###
+update toolkit==1.9.2
