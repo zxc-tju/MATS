@@ -1,4 +1,5 @@
 using SpecialFunctions
+using JuMP
 
 
 mutable struct MPCValues{T}
@@ -90,36 +91,36 @@ end
 
 
 struct MPCVariables
-    q       ::Array{Variable, 2}
-    u       ::Array{Variable, 2}
+    q       ::Array{JuMP.VariableRef, 2}
+    u       ::Array{JuMP.VariableRef, 2}
 end
 
 
 mutable struct MPCParams
-    qc      ::Parameter
-    qcterm  ::Parameter
-    ql      ::Parameter
-    γ       ::Parameter
-    R       ::Parameter
-    L       ::Parameter
-    dt      ::Parameter
+    qc      ::Float64
+    qcterm  ::Float64
+    ql      ::Float64
+    γ       ::Float64
+    R       ::Float64
+    L       ::Float64
+    dt      ::Float64
 
-    q0      ::Parameter
-    u0      ::Parameter
+    q0      ::Float64
+    u0      ::Float64
 
-    ω_max   ::Parameter
-    ω_min   ::Parameter
-    a_max   ::Parameter
-    a_min   ::Parameter
-    vs_max  ::Parameter
-    vs_min  ::Parameter
+    ω_max   ::Float64
+    ω_min   ::Float64
+    a_max   ::Float64
+    a_min   ::Float64
+    vs_max  ::Float64
+    vs_min  ::Float64
 
     As
     Bs
     gs
 
-    c       ::Parameter
-    Γ       ::Parameter
+    c       ::Float64
+    Γ       ::Float64
 
     ps
     p_obs
@@ -173,8 +174,7 @@ end
 
 function construct_problem(dynamics::DynamicsModel, vals::MPCValues, scene, qs, us; verbose=false) where {T}
     # create model
-    optimizer = OSQP.Optimizer(verbose=verbose)
-    model = Model(optimizer)
+    model = Model(optimizer_with_attributes(OSQP.Optimizer, "verbose" => verbose))
 
     # convenience definitions
     n_modes = vals.n_modes
@@ -182,31 +182,35 @@ function construct_problem(dynamics::DynamicsModel, vals::MPCValues, scene, qs, 
     k_c = vals.k_c
     n = vals.n
     m = vals.m
-
+    
     # MPC parameters
-    qc = Parameter(() -> vals.qc, model)
-    qcterm = Parameter(() -> vals.qcterm, model)
-    ql = Parameter(() -> vals.ql, model)
-    γ = Parameter(() -> vals.γ, model)
-    R = Parameter(() -> vals.R, model)
-    L = Parameter(() -> vals.L, model)
-    dt = Parameter(() -> vals.dt, model)
-    q0 = Parameter(() -> vals.q0, model)
-    u0 = Parameter(() -> vals.u0, model)
-
+    qc = vals.qc
+    qcterm = vals.qcterm
+    ql = vals.ql
+    γ = vals.γ
+    R = vals.R
+    L = vals.L
+    dt = vals.dt
+    q0 = vals.q0
+    u0 = vals.u0
+    
     # dynamics parameters
-    ω_max = Parameter(() -> dynamics.u_limits.ω_max, model)
-    ω_min = Parameter(() -> dynamics.u_limits.ω_min, model)
-    a_max = Parameter(() -> dynamics.u_limits.a_max, model)
-    a_min = Parameter(() -> dynamics.u_limits.a_min, model)
-    vs_max = Parameter(() -> dynamics.u_limits.vs_max, model)
-    vs_min = Parameter(() -> dynamics.u_limits.vs_min, model)
+    ω_max = dynamics.u_limits.ω_max
+    ω_min = dynamics.u_limits.ω_min
+    a_max = dynamics.u_limits.a_max
+    a_min = dynamics.u_limits.a_min
+    vs_max = dynamics.u_limits.vs_max
+    vs_min = dynamics.u_limits.vs_min
+
+
+
 
     # decision variables
     S_q = k_c + n_modes * (N - k_c)
     S_u = S_q - 1
-    q = [Variable(model) for i in 1:n, t in 1:S_q]        # (x, y, θ, V) + s
-    u = [Variable(model) for i in 1:m, t in 1:S_u]        # (ω, a) + vs
+    @variable(model, q[1:n, 1:S_q])  # (x, y, θ, V) + s
+    @variable(model, u[1:m, 1:S_u])  # (ω, a) + vs
+
 
     # initial/final state constraints
     state_constraints!(model, q, q0, vals)
@@ -221,8 +225,8 @@ function construct_problem(dynamics::DynamicsModel, vals::MPCValues, scene, qs, 
 
     # contour/lag cost matrices
     tracking_cost_matrices!(qs, vals)
-    c = Parameter(() -> vals.c, model)
-    Γ = Parameter(() -> vals.Γ, model)
+    c = vals.c
+    Γ = vals.Γ
 
     # set up for control effort term
     Δu = diff(u, dims = 2)[:]
@@ -239,16 +243,19 @@ function construct_problem(dynamics::DynamicsModel, vals::MPCValues, scene, qs, 
     end
 
     # assemble objective function
-    obj = @expression transpose(c) * q[[1,2,5],:][:]  +
-                      transpose(q[[1,2,5],:][:]) * Γ * q[[1,2,5],:][:] +
-                      transpose(Δu) * R * Δu -
-                      transpose(L) * u[m, :] +
-                      transpose((u[:, 1] - u0)) * diagm([vals.rΔω, vals.rΔa, vals.rΔvs]) * (u[:, 1] - u0)
+    @expression(model, obj, 
+    transpose(c) * q[[1,2,5],:][:]  +
+    transpose(q[[1,2,5],:][:]) * Γ * q[[1,2,5],:][:] +
+    transpose(Δu) * R * Δu -
+    transpose(L) * u[m, :] +
+    transpose((u[:, 1] - u0)) * diagm([vals.rΔω, vals.rΔa, vals.rΔvs]) * (u[:, 1] - u0)
+)
 
-    @objective(model, Minimize, obj)
-    params = MPCParams(qc, qcterm, ql, γ, R, L, dt, q0, u0, ω_max, ω_min, a_max, a_min,
-        vs_max, vs_min, As, Bs, gs, c, Γ, ps, p_obs, obs_on)
-    # params = 0
+
+    @objective(model, Min, obj)
+    #ZXC CHECK params = MPCParams(qc, qcterm, ql, γ, R, L, dt, q0, u0, ω_max, ω_min, a_max, a_min,
+    #    vs_max, vs_min, As, Bs, gs, c, Γ, ps, p_obs, obs_on)
+    params = 0
     variables = MPCVariables(q, u)
 
     # model

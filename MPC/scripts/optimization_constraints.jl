@@ -12,8 +12,8 @@
     vs_max = control_limits[5]
     vs_min = control_limits[6]
 
-    tan_param = Parameter(() -> tand(30.), model)
-    L_param = Parameter(() -> 4., model)
+    tan_param = tand(30.)
+    L_param = 4.
 
     # TODO: revise the rotation control constraint and address hardcoding
     for k in 1:S_u
@@ -50,12 +50,12 @@ function dynamics_constraints!(model, q, u, qs, us, vals)
         vals.Bs[k] = Bk
         vals.gs[k] = discrete_dynamics(qs[1:n-1, k], us[1:m-1, k], dt) - Ak * qs[1:n-1, k] - Bk * us[1:m-1, k]
 
-        push!(As, Parameter(() -> vals.As[k], model))
-        push!(Bs, Parameter(() -> vals.Bs[k], model))
-        push!(gs, Parameter(() -> vals.gs[k], model))
-
-        @constraint(model, As[k] * q[1:n-1, k] + Bs[k] * u[1:m-1, k] + gs[k] == q[1:n-1, k+1])
-        @constraint(model, dt * u[m, k] + q[n, k] == q[n, k+1])
+        push!(As, vals.As[k])
+        push!(Bs, vals.Bs[k])
+        push!(gs, vals.gs[k])
+        
+        @constraint(model, As[k] * q[1:n-1, k] + Bs[k] * u[1:m-1, k] + gs[k] .== q[1:n-1, k+1])     	
+        @constraint(model, dt * u[m, k] + q[n, k] .== q[n, k+1])
     end
 
     # constraints for transitions from k_c to subsequent time step for each mode
@@ -65,15 +65,15 @@ function dynamics_constraints!(model, q, u, qs, us, vals)
     vals.As[k_c] = Ak_c
     vals.Bs[k_c] = Bk_c
     vals.gs[k_c] = discrete_dynamics(qs[1:n-1, k_c], us[1:m-1, k_c], dt) - Ak_c * qs[1:n-1, k_c] - Bk_c * us[1:m-1, k_c]
-    push!(As, Parameter(() -> vals.As[k_c], model))
-    push!(Bs, Parameter(() -> vals.Bs[k_c], model))
-    push!(gs, Parameter(() -> vals.gs[k_c], model))
+    push!(As, vals.As[k_c])
+    push!(Bs, vals.Bs[k_c])
+    push!(gs, vals.gs[k_c])
 
     for j = 1:n_modes
         next_state_idx = k_c + (j - 1) * (N - k_c) + 1
 
-        @constraint(model, As[k_c] * q[1:n-1, k_c] + Bs[k_c] * u[1:m-1, k_c] + gs[k_c] == q[1:n-1, next_state_idx])
-        @constraint(model, dt * u[m, k_c] + q[n, k_c] == q[n, next_state_idx])
+        @constraint(model, As[k_c] * q[1:n-1, k_c] + Bs[k_c] * u[1:m-1, k_c] + gs[k_c] .== q[1:n-1, next_state_idx])
+        @constraint(model, dt * u[m, k_c] + q[n, k_c] .== q[n, next_state_idx])
     end
 
     # constraints for transitions for each parallel horizon "tail" #TODO: check this
@@ -88,12 +88,12 @@ function dynamics_constraints!(model, q, u, qs, us, vals)
             vals.Bs[k - (j-1)] = Bk
             vals.gs[k - (j-1)] = discrete_dynamics(qs[1:n-1, k], us[1:m-1, k-(j-1)], dt) - Ak * qs[1:n-1, k] - Bk * us[1:m-1, k-(j-1)]
 
-            push!(As, Parameter(() -> vals.As[k-(j-1)], model))
-            push!(Bs, Parameter(() -> vals.Bs[k-(j-1)], model))
-            push!(gs, Parameter(() -> vals.gs[k-(j-1)], model))
+            push!(As, vals.As[k-(j-1)])
+            push!(Bs, vals.Bs[k-(j-1)])
+            push!(gs, vals.gs[k-(j-1)])
 
-            @constraint(model, As[k - (j-1)] * q[1:n-1, k] + Bs[k-(j-1)] * u[1:m-1, k-(j-1)] + gs[k-(j-1)] == q[1:n-1, k+1])
-            @constraint(model, dt * u[m, k-(j-1)] + q[n, k] == q[n, k+1])
+            @constraint(model, As[k - (j-1)] * q[1:n-1, k] + Bs[k-(j-1)] * u[1:m-1, k-(j-1)] + gs[k-(j-1)] .== q[1:n-1, k+1])
+            @constraint(model, dt * u[m, k-(j-1)] + q[n, k] .== q[n, k+1])
         end
     end
 
@@ -104,7 +104,7 @@ end
 #TODO: This function can be neater.
 function state_constraints!(model, q, q0, vals)
     # initial state constraint
-    @constraint(model, q0 == q[:,1])
+    @constraint(model, q0 .== q[:,1])
 
     # max/min velocity constraint #TODO: this is a hard coded constraint
     for k = 1:vals.N
@@ -112,6 +112,7 @@ function state_constraints!(model, q, q0, vals)
         @constraint(model, q[4, k] >= 0.0) # 5 cm/s ;)
     end
 end
+
 
 
 """
@@ -129,19 +130,20 @@ function obstacle_constraints!(model, q, qs, vals, scene)
 
     ps = []
     p_obs = []
-    obs_on = [Parameter(() -> vals.p_obs[node_id].active, model) for node_id in node_ids]
+    obs_on = [vals.p_obs[node_id].active for node_id in node_ids]
 
     #TODO: These are hard-coded distances. Change to chance-constraints.
     for k = 1:S_q
         vals.ps[k] = qs[1:2, k]
-        push!(ps, Parameter(() -> vals.ps[k], model))
+        push!(ps, vals.ps[k])
     end
 
     for j = 1:n_modes
         for k = 1:k_c
             for (i, node_id) in enumerate(node_ids)
-                push!(p_obs, Parameter(() -> vals.p_obs[node_id].ps[j][k], model))
-                a = @expression (ps[k] - p_obs[length(p_obs)]) / norm(ps[k] - p_obs[length(p_obs)])
+                push!(p_obs, vals.p_obs[node_id].ps[j][k])
+                # @expression(model, a, (ps[k] - p_obs[length(p_obs)]) / norm(ps[k] - p_obs[length(p_obs)]))
+                a = (ps[k] - p_obs[length(p_obs)]) / norm(ps[k] - p_obs[length(p_obs)])
                 b = 3.
                 @constraint(model, obs_on[i]*transpose(a)*(q[1:2, k] - p_obs[length(p_obs)]) >= obs_on[i]*(b))
             end
@@ -154,8 +156,9 @@ function obstacle_constraints!(model, q, qs, vals, scene)
                 idx_os = (j - 1) * (N - k_c) # index offset
                 k_os = k + idx_os
 
-                push!(p_obs, Parameter(() -> vals.p_obs[node_id].ps[j][k], model))
-                a = @expression (ps[k_os] - p_obs[length(p_obs)]) / norm(ps[k_os] - p_obs[length(p_obs)])
+                push!(p_obs, vals.p_obs[node_id].ps[j][k])
+                # @expression(model, a, (ps[k_os] - p_obs[length(p_obs)]) / norm(ps[k_os] - p_obs[length(p_obs)]))
+                a = (ps[k_os] - p_obs[length(p_obs)]) / norm(ps[k_os] - p_obs[length(p_obs)])
                 b = 3.
                 @constraint(model, obs_on[i]*transpose(a)*(q[1:2, k_os] - p_obs[length(p_obs)]) >= obs_on[i]*(b))
             end

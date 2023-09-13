@@ -101,3 +101,5 @@ An interactive notebook demonstrating an example of MATS + MPC implementation ca
 
 ### ZXC notes ###
 update toolkit==1.9.2
+
+change Parametron into JuMP to solve the conflicts in dependencies
