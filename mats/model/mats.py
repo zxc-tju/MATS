@@ -386,6 +386,8 @@ class MATS(object):
                 u_r = robot_future_actions_st_t[batch_num][timestep]
                 u_a = np.zeros((num_samples, num_components, num_agents * 2))
 
+                # zxc: affine term is related to current state and action. Therefore, actual action u_a need
+                # to be calculated
                 if timestep == 0:
                     self.compute_agent_controls(prev_x_init.detach().cpu().numpy(),
                                                 x_init.detach().cpu().numpy(),
