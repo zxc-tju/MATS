@@ -100,6 +100,15 @@ To setup the Julia environment and necessary dependencies, navigate to the root 
 An interactive notebook demonstrating an example of MATS + MPC implementation can be found within the `MPC/MPC_example` directory.
 
 ### ZXC notes ###
-update toolkit==1.9.2
+- update toolkit==1.9.2
+- change Parametron into JuMP to solve the conflicts in dependencies
+- julia = 1.2.0
 
-change Parametron into JuMP to solve the conflicts in dependencies
+
+#### Steps for running julia notebook ####
+- ``` julia ``` in ./MATS/
+- ``` ] ``` using Pkg
+- ``` activate . ``` to activate the virtual julia env. in current dir.
+- ``` back ``` to end Pkg
+- ``` using IJulia ```
+- ``` notebook() ``` to open the notebook in MPC_Example
