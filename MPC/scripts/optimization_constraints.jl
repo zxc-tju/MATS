@@ -1,4 +1,4 @@
- function control_constraints!(model, qs, u, control_limits, vals)
+ function control_constraints!(model, qs, u, control_limits, vals)  # ZXC Note: the qs here should be "q"
     n_modes = vals.n_modes
     N = vals.N
     k_c = vals.k_c
