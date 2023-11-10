@@ -100,22 +100,32 @@ To setup the Julia environment and necessary dependencies, navigate to the root 
 An interactive notebook demonstrating an example of MATS + MPC implementation can be found within the `MPC/MPC_example` directory.
 
 ### ZXC notes ###
-- set data path for visualizing data in mini set
-  - make dir ./nuScenes/v1.0-mini/
-  - download v1.0-mini and extract it into ./nuScenes/v1.0-mini/
-  - move "maps" into ./nuScenes/v1.0-mini/
-  - extract nuScenes-map-expansion-v1.3 and put all the contents into ./nuScenes/v1.0-mini/
+#### set data path for visualizing data in mini set ####
+- make dir ```./nuScenes/v1.0-mini/```
+- download v1.0-mini and extract it into ```./nuScenes/v1.0-mini/```
+- move "maps" into ```./nuScenes/v1.0-mini/```
+- extract nuScenes-map-expansion-v1.3 and put all the contents into ```./nuScenes/v1.0-mini/```
 - run process_data before paper plot
 
+#### update julia codes to solve dependencies missing
 ~~- update toolkit==1.9.2~~
 - change Parametron into JuMP to solve the conflicts in dependencies
 - julia = 1.2.0
 
+#### Set python for julia PyCall
+- ``` julia ``` in ./MATS/
+- ``` ] ``` to use Pkg
+- ``` activate . ``` to activate the virtual julia env. in current dir.
+- ``` back ``` to end Pkg
+- ```ENV["PYTHON"]="your python path"``` to set python dir
+- ``` ] ``` to use Pkg
+- ```Pkg.build("PyCall")```
 
 #### Steps for running julia notebook ####
 - ``` julia ``` in ./MATS/
-- ``` ] ``` using Pkg
+- ``` ] ``` to use Pkg
 - ``` activate . ``` to activate the virtual julia env. in current dir.
+- ``` build ``` to install all the dependencies listed in project's Project.toml file
 - ``` back ``` to end Pkg
 - ``` using IJulia ```
 - ``` notebook() ``` to open the notebook in MPC_Example
