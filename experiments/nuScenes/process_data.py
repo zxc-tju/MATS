@@ -483,7 +483,7 @@ def process_scene(sample_token, processed_sample_tokens,
 def process_data(data_path, version, output_path, half_dt, dynamic):
     nusc = NuScenes(version=version, dataroot=data_path, verbose=True)
     helper = PredictHelper(nusc)
-    for data_class in ['mini_train', 'mini_val']: # Change this to 'val', 'train_val', 'train' if you want to do the full set.
+    for data_class in ['val', 'train_val', 'train']: # Change this to 'mini_train', 'mini_val' if you want to do the mini set.
         env = Environment(node_type_list=['VEHICLE', 'PEDESTRIAN'], standardization=standardization)
         attention_radius = dict()
         attention_radius[(env.NodeType.PEDESTRIAN, env.NodeType.PEDESTRIAN)] = 10.0
@@ -505,7 +505,7 @@ def process_data(data_path, version, output_path, half_dt, dynamic):
                                   env, nusc, helper, data_path, data_class,
                                   half_dt, dynamic)
             if scene is not None:
-                if 'mini_train' == data_class: # Change this to "train" if you want to do the full set.
+                if "train" == data_class: # Change this to 'mini_train' if you want to do the mini set.
                     scene.augmented = list()
                     angles = np.arange(0, 360, 15)
                     for angle in angles:

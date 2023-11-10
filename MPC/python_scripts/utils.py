@@ -199,7 +199,7 @@ def update_obstacles_from_predictions(q_pred, present_node_ids, vals, scene, ite
 
 
 def end_horizon_idces(vals):
-    n_modes = vals['n_modes']
-    N = vals['N']
-    k_c = vals['k_c']
+    n_modes = vals.num_modes
+    N = vals.horizon
+    k_c = vals.consensus_horizon
     return [N + (N - k_c) * (i - 1) for i in range(1, n_modes + 1)]

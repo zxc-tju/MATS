@@ -1,4 +1,4 @@
-import numpy as np
+import autograd.numpy as np
 from autograd import grad
 
 
@@ -114,4 +114,6 @@ def dpath_ds(s, path, spline_idx):
 
 def heading(s, path, spline_idx):
     dx_ds, dy_ds = dpath_ds(s, path, spline_idx)
+    # print('dx_ds:', dx_ds)
+    # print('dy_ds:', dy_ds)
     return np.arctan2(dy_ds, dx_ds)

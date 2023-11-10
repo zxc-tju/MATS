@@ -1,11 +1,12 @@
 import numpy as np
 import casadi as ca
+from casadi import mtimes, MX
 from scipy.linalg import block_diag
 
-from MPC.python_scripts.path_handling import find_spline_interval, spline_x, spline_y, heading
-from MPC.python_scripts.dynamics import linearize_dynamics, discrete_dynamics
-from MPC.python_scripts.cost import tracking_linear_term,tracking_quadratic_term
-from MPC.python_scripts.utils import end_horizon_idces
+from MATS.MPC.python_scripts.path_handling import find_spline_interval, spline_x, spline_y, heading
+from MATS.MPC.python_scripts.dynamics import linearize_dynamics, discrete_dynamics
+from MATS.MPC.python_scripts.cost import tracking_linear_term,tracking_quadratic_term
+from MATS.MPC.python_scripts.utils import end_horizon_idces
 
 class MPCValues:
     def __init__(self, path, num_modes: int = 1, horizon: int = 40,
@@ -235,7 +236,11 @@ class MPCProblem:
                             p_obs.append(self.vals.obstacles[node_id].positions[j][k])
 
                         a = (ps[k] - p_obs[-1]) / np.linalg.norm(ps[k] - p_obs[-1])
-                        self.model.subject_to(obs_on[i] * (a.T @ (self.q[0:2, k_os] - p_obs[-1])) >= obs_on[i] * b)
+                        a_mx = MX(a.T).T  # Convert 'a' from NumPy to MX type
+                        # test = obs_on[i] * mtimes(a_mx, (self.q[0:2, k_os] - p_obs[-1]))
+                        if obs_on[i]:
+                            self.model.subject_to(mtimes(a_mx, (self.q[0:2, k_os] - p_obs[-1])) >= b)
+                        # self.model.subject_to(obs_on[i] * (a.T @ (self.q[0:2, k_os] - p_obs[-1])) >= obs_on[i] * b)
 
             return ps, p_obs, obs_on
 
@@ -244,7 +249,7 @@ class MPCProblem:
         cs = []
         Γs = []
         for k in range(S_q):
-            P0 = self.qs[:3, k]  # X, Y, s of the initial guess
+            P0 = [self.qs[0, k], self.qs[1, k], self.qs[4, k]]  # X, Y, s of the initial guess
             spline_idx = find_spline_interval(P0[2], self.vals.path)
             if k in end_horizon_idces(self.vals):
                 ck = tracking_linear_term(P0, self.vals.terminal_contouring, self.vals.lag_cost, self.vals.path, spline_idx)
@@ -269,8 +274,9 @@ class MPCProblem:
         # Tracking error
         tracking_error = 0
         for k in range(self.vals.S_state):
-            P = self.q[:3, k]
-            tracking_error += ca.mtimes([P.T, self.vals.Γ[k], P]) - 2 * ca.mtimes([P.T, self.vals.c[k]])
+            P = [self.q[0, k], self.q[1, k], self.q[4, k]]  # X, Y, s of the initial guess
+            tracking_error += (ca.mtimes([P.T, self.vals.linear_contouring_matrix[k], P])
+                               + ca.mtimes([P.T, self.vals.contouring_state[k]]))
 
         # Control effort
         Δu = self.u[:, 1:] - self.u[:, :-1]

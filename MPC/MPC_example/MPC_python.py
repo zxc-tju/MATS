@@ -13,10 +13,11 @@ import evaluation
 import visualization
 # import helper as plotting_helper
 
-from MPC.python_scripts.utils import *
-from MPC.python_scripts.structs import *
-from MPC.python_scripts.path_handling import *
-from MPC.python_scripts.mpc import *
+
+from MATS.MPC.python_scripts.utils import *
+from MATS.MPC.python_scripts.structs import *
+from MATS.MPC.python_scripts.path_handling import *
+from MATS.MPC.python_scripts.mpc import *
 
 # load data
 env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full.pkl")
@@ -29,9 +30,9 @@ mats, hyperparams = load_model(model_path, env, ts=11)
 num_modes = 1
 pred_settings = PredictionSettings(mats, hyperparams, env, num_modes)
 # select scene
-scene_num = 23
+scene_num = 23  # corresponds to 24 in julia indexing
 scene = create_scene(env, scene_num)
-print(scene.robot.x[2:10])
+# print(scene.robot.x[2:10])
 
 if not os.path.isdir('./data'):
     os.mkdir('./data')
@@ -65,8 +66,8 @@ update_obstacles_from_predictions(q_pred, nodes_present, vals_obj, scene)
 #
 # initial solution guess
 qs, us = initial_guess(vals_obj)
-print(f"qs: {qs}")
-print(f"us: {np.size(us)}")
+# print(f"qs: {qs}")
+# print(f"us: {np.size(us)}")
 
 # construct problem
 mpc = MPCProblem(dynamics_obj, vals_obj, scene, qs, us)
