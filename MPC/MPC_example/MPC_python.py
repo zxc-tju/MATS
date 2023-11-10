@@ -72,4 +72,9 @@ qs, us = initial_guess(vals_obj)
 # construct problem
 mpc = MPCProblem(dynamics_obj, vals_obj, scene, qs, us)
 
+q_star, u_star = mpc.solve()
+print(q_star)
+print(u_star)
+
+
 "Solve MPC"

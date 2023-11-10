@@ -113,7 +113,7 @@ class MPCProblem:
         self.state_constraints()
         self.control_constraints()
         self.dynamics_constraints()
-        self.obstacle_constraints()
+        # self.obstacle_constraints()
         self.tracking_cost_matrices()
         self.assemble_objective()
 
@@ -269,14 +269,12 @@ class MPCProblem:
         dt = self.vals.timestep
         R = self.vals.control_penalty
         L = self.vals.progress_reward
-        u0 = self.vals.initial_state
+        u0 = self.vals.initial_control
 
         # Tracking error
-        tracking_error = 0
-        for k in range(self.vals.S_state):
-            P = [self.q[0, k], self.q[1, k], self.q[4, k]]  # X, Y, s of the initial guess
-            tracking_error += (ca.mtimes([P.T, self.vals.linear_contouring_matrix[k], P])
-                               + ca.mtimes([P.T, self.vals.contouring_state[k]]))
+        P_array = MX(self.q[[0, 1, 4], :])  # X, Y, s of the initial guess
+        P = P_array.reshape((-1, 1))
+        tracking_error =ca.mtimes([P.T, self.vals.linear_contouring_matrix, P]) + ca.mtimes([P.T, self.vals.contouring_state])
 
         # Control effort
         Δu = self.u[:, 1:] - self.u[:, :-1]
@@ -288,7 +286,7 @@ class MPCProblem:
 
         # Progress reward
         m = self.vals.control_dim
-        progress_reward = ca.mtimes(self.vals.progress_reward.T, self.u[m - 1, :])
+        progress_reward = ca.mtimes(self.u[m - 1, :], self.vals.progress_reward_vector)
 
         # Assemble objective
         objective = tracking_error + control_effort + input_rate_cost - progress_reward
@@ -301,6 +299,9 @@ class MPCProblem:
         s_opts = {"max_iter": 1000}
         self.model.solver('ipopt', p_opts, s_opts)
         result = self.model.solve()
+
+        # status = self.model.solver.stats()['return_status']
+        # print(status)
         return result.value(self.q), result.value(self.u)
 
 
