@@ -157,7 +157,7 @@ class MPCProblem:
 
         As, Bs, gs = [], [], []
 
-        for k in range(consensus_horizon - 1):
+        for k in range(consensus_horizon-1):
             Ak, Bk = linearize_dynamics(discrete_dynamics, self.qs[0:state_dim - 1, k], self.us[0:control_dim - 1, k], dt)
             self.vals.As[k] = Ak
             self.vals.Bs[k] = Bk
@@ -171,41 +171,41 @@ class MPCProblem:
                 ca.mtimes(As[k], self.q[0:state_dim - 1, k]) + ca.mtimes(Bs[k], self.u[0:control_dim - 1, k]) + gs[k] == self.q[0:state_dim - 1, k + 1])
             self.model.subject_to(dt * self.u[control_dim - 1, k] + self.q[state_dim - 1, k] == self.q[state_dim - 1, k + 1])
 
-        # # Constraints for transitions from k_c to subsequent time step for each mode
-        # Ak_c, Bk_c = linearize_dynamics(discrete_dynamics, self.qs[0:state_dim - 1, consensus_horizon - 1], self.us[0:control_dim - 1, consensus_horizon - 1], dt)
-        # self.vals.As[consensus_horizon] = Ak_c
-        # self.vals.Bs[consensus_horizon] = Bk_c
-        # self.vals.gs[consensus_horizon] = discrete_dynamics(self.qs[0:state_dim - 1, consensus_horizon], self.us[0:control_dim - 1, consensus_horizon], dt) - Ak_c @ self.qs[0:state_dim - 1, consensus_horizon] - Bk_c @ self.us[0:control_dim - 1, consensus_horizon]
-        #
-        # As.append(Ak_c)
-        # Bs.append(Bk_c)
-        # gs.append(self.vals.gs[consensus_horizon])
-        #
-        # for j in range(n_modes):
-        #     next_state_idx = consensus_horizon + (j * (horizon - consensus_horizon))
-        #     self.model.subject_to(
-        #         ca.mtimes(As[consensus_horizon], self.q[0:state_dim - 1, consensus_horizon]) + ca.mtimes(Bs[consensus_horizon], self.u[0:control_dim - 1, consensus_horizon]) + gs[consensus_horizon] == self.q[0:state_dim - 1, next_state_idx])
-        #     self.model.subject_to(dt * self.u[control_dim - 1, consensus_horizon] + self.q[state_dim - 1, consensus_horizon] == self.q[state_dim - 1, next_state_idx])
-        #
-        # # Constraints for transitions for each parallel horizon "tail"
-        # for j in range(n_modes):
-        #     idx_offset = (j * (N - k_c))
-        #     start_idx = k_c + idx_offset
-        #     end_idx = start_idx + (N - k_c - 1)
-        #
-        #     for k in range(start_idx, end_idx):
-        #         Ak, Bk = linearize_dynamics(discrete_dynamics, self.qs[0:n - 1, k], self.us[0:m - 1, k], dt)
-        #         self.vals.As[k] = Ak
-        #         self.vals.Bs[k] = Bk
-        #         self.vals.gs[k] = discrete_dynamics(self.qs[0:n - 1, k], self.us[0:m - 1, k], dt) - Ak @ self.qs[0:n - 1, k] - Bk @ self.us[0:m - 1, k]
-        #
-        #         As.append(Ak)
-        #         Bs.append(Bk)
-        #         gs.append(self.vals.gs[k])
-        #
-        #         self.model.subject_to(
-        #             ca.mtimes(As[k], self.q[0:n - 1, k]) + ca.mtimes(Bs[k], self.u[0:m - 1, k]) + gs[k] == self.q[0:n - 1, k + 1])
-        #         self.model.subject_to(dt * self.u[m - 1, k] + self.q[n - 1, k] == self.q[n - 1, k + 1])
+        # Constraints for transitions from k_c to subsequent time step for each mode
+        Ak_c, Bk_c = linearize_dynamics(discrete_dynamics, self.qs[0:state_dim - 1, consensus_horizon-1], self.us[0:control_dim - 1, consensus_horizon-1], dt)
+        self.vals.As[consensus_horizon-1] = Ak_c
+        self.vals.Bs[consensus_horizon-1] = Bk_c
+        self.vals.gs[consensus_horizon-1] = discrete_dynamics(self.qs[0:state_dim - 1, consensus_horizon-1], self.us[0:control_dim - 1, consensus_horizon-1], dt) - Ak_c @ self.qs[0:state_dim - 1, consensus_horizon-1] - Bk_c @ self.us[0:control_dim - 1, consensus_horizon-1]
+
+        As.append(Ak_c)
+        Bs.append(Bk_c)
+        gs.append(self.vals.gs[consensus_horizon-1])
+
+        for j in range(n_modes):
+            next_state_idx = consensus_horizon + (j * (horizon - consensus_horizon))
+            self.model.subject_to(
+                ca.mtimes(As[consensus_horizon-1], self.q[0:state_dim - 1, consensus_horizon-1]) + ca.mtimes(Bs[consensus_horizon-1], self.u[0:control_dim - 1, consensus_horizon-1]) + gs[consensus_horizon-1] == self.q[0:state_dim - 1, next_state_idx])
+            self.model.subject_to(dt * self.u[control_dim - 1, consensus_horizon-1] + self.q[state_dim - 1, consensus_horizon-1] == self.q[state_dim - 1, next_state_idx])
+
+        # Constraints for transitions for each parallel horizon "tail"
+        for j in range(n_modes):
+            idx_offset = j * (horizon - consensus_horizon)
+            start_idx = consensus_horizon + idx_offset
+            end_idx = start_idx + (horizon - consensus_horizon - 1)
+
+            for k in range(start_idx, end_idx):
+                Ak, Bk = linearize_dynamics(discrete_dynamics, self.qs[0:state_dim - 1, k], self.us[0:control_dim - 1, k], dt)
+                self.vals.As[k] = Ak
+                self.vals.Bs[k] = Bk
+                self.vals.gs[k] = discrete_dynamics(self.qs[0:state_dim - 1, k], self.us[0:control_dim - 1, k], dt) - Ak @ self.qs[0:state_dim - 1, k] - Bk @ self.us[0:control_dim - 1, k]
+
+                As.append(Ak)
+                Bs.append(Bk)
+                gs.append(self.vals.gs[k])
+
+                self.model.subject_to(
+                    ca.mtimes(As[k], self.q[0:state_dim - 1, k]) + ca.mtimes(Bs[k], self.u[0:control_dim - 1, k]) + gs[k] == self.q[0:state_dim - 1, k + 1])
+                self.model.subject_to(dt * self.u[control_dim - 1, k] + self.q[state_dim - 1, k] == self.q[state_dim - 1, k + 1])
 
     def obstacle_constraints(self):
         n_modes = self.vals.num_modes
