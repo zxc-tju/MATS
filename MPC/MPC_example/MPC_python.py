@@ -49,32 +49,28 @@ path_obj = SplinePath(x_coefs_var, y_coefs_var, breaks_var)
 q0 = [scene.robot.x[first_ts], scene.robot.y[first_ts], scene.robot.theta[first_ts], scene.robot.v[first_ts], 0]
 q0[4] = find_best_s(q0, path_obj, enable_global_search=True)
 
-# print(f"q0: {q0}")
-
 # MPC parameters, constraints and settings
 control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
 dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
 vals_obj = MPCValues(path_obj, num_modes=num_modes, horizon=25,
                      consensus_horizon=4, initial_state=q0, num_obstacles=len(scene.non_robot_nodes))
-#
+
 # make first predictions for obstacle constraints
 init_node_obstacles(scene, vals_obj)
 Aps, Bps, gps, q_pred0, nodes_present = predicted_dynamics(pred_settings, scene_num, first_ts)
 u_pred = get_recorded_robot_controls(pred_settings, scene_num, first_ts)
 q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in range(0, vals_obj.num_modes)]
 update_obstacles_from_predictions(q_pred, nodes_present, vals_obj, scene)
-#
+
 # initial solution guess
 qs, us = initial_guess(vals_obj)
-# print(f"qs: {qs}")
-# print(f"us: {np.size(us)}")
 
 # construct problem
 mpc = MPCProblem(dynamics_obj, vals_obj, scene, qs, us)
 
 q_star, u_star = mpc.solve()
-print(q_star)
-print(u_star)
+print('output q', q_star[:, 0:3])
+# print(u_star)
 
 
 "Solve MPC"

@@ -5,8 +5,9 @@ from scipy.linalg import block_diag
 
 from MATS.MPC.python_scripts.path_handling import find_spline_interval, spline_x, spline_y, heading
 from MATS.MPC.python_scripts.dynamics import linearize_dynamics, discrete_dynamics
-from MATS.MPC.python_scripts.cost import tracking_linear_term,tracking_quadratic_term
+from MATS.MPC.python_scripts.cost import tracking_linear_term, tracking_quadratic_term
 from MATS.MPC.python_scripts.utils import end_horizon_idces
+
 
 class MPCValues:
     def __init__(self, path, num_modes: int = 1, horizon: int = 40,
@@ -113,7 +114,7 @@ class MPCProblem:
         self.state_constraints()
         self.control_constraints()
         self.dynamics_constraints()
-        # self.obstacle_constraints()
+        self.obstacle_constraints()
         self.tracking_cost_matrices()
         self.assemble_objective()
 
@@ -148,43 +149,43 @@ class MPCProblem:
 
     def dynamics_constraints(self):
         n_modes = self.vals.num_modes
-        N = self.vals.horizon
-        k_c = self.vals.consensus_horizon
+        horizon = self.vals.horizon
+        consensus_horizon = self.vals.consensus_horizon
         dt = self.vals.timestep
-        n = self.vals.state_dim
-        m = self.vals.control_dim
+        state_dim = self.vals.state_dim
+        control_dim = self.vals.control_dim
 
         As, Bs, gs = [], [], []
 
-        for k in range(k_c - 1):
-            Ak, Bk = linearize_dynamics(discrete_dynamics, self.qs[0:n - 1, k], self.us[0:m - 1, k], dt)
+        for k in range(consensus_horizon - 1):
+            Ak, Bk = linearize_dynamics(discrete_dynamics, self.qs[0:state_dim - 1, k], self.us[0:control_dim - 1, k], dt)
             self.vals.As[k] = Ak
             self.vals.Bs[k] = Bk
-            self.vals.gs[k] = discrete_dynamics(self.qs[0:n - 1, k], self.us[0:m - 1, k], dt) - Ak @ self.qs[0:n - 1, k]
+            self.vals.gs[k] = discrete_dynamics(self.qs[0:state_dim - 1, k], self.us[0:control_dim - 1, k], dt) - Ak @ self.qs[0:state_dim - 1, k]
 
             As.append(Ak)
             Bs.append(Bk)
             gs.append(self.vals.gs[k])
 
             self.model.subject_to(
-                ca.mtimes(As[k], self.q[0:n - 1, k]) + ca.mtimes(Bs[k], self.u[0:m - 1, k]) + gs[k] == self.q[0:n - 1, k + 1])
-            self.model.subject_to(dt * self.u[m - 1, k] + self.q[n - 1, k] == self.q[n - 1, k + 1])
+                ca.mtimes(As[k], self.q[0:state_dim - 1, k]) + ca.mtimes(Bs[k], self.u[0:control_dim - 1, k]) + gs[k] == self.q[0:state_dim - 1, k + 1])
+            self.model.subject_to(dt * self.u[control_dim - 1, k] + self.q[state_dim - 1, k] == self.q[state_dim - 1, k + 1])
 
         # # Constraints for transitions from k_c to subsequent time step for each mode
-        # Ak_c, Bk_c = linearize_dynamics(discrete_dynamics, self.qs[0:n - 1, k_c], self.us[0:m - 1, k_c], dt)
-        # self.vals.As[k_c] = Ak_c
-        # self.vals.Bs[k_c] = Bk_c
-        # self.vals.gs[k_c] = discrete_dynamics(self.qs[0:n - 1, k_c], self.us[0:m - 1, k_c], dt) - Ak_c @ self.qs[0:n - 1, k_c] - Bk_c @ self.us[0:m - 1, k_c]
+        # Ak_c, Bk_c = linearize_dynamics(discrete_dynamics, self.qs[0:state_dim - 1, consensus_horizon - 1], self.us[0:control_dim - 1, consensus_horizon - 1], dt)
+        # self.vals.As[consensus_horizon] = Ak_c
+        # self.vals.Bs[consensus_horizon] = Bk_c
+        # self.vals.gs[consensus_horizon] = discrete_dynamics(self.qs[0:state_dim - 1, consensus_horizon], self.us[0:control_dim - 1, consensus_horizon], dt) - Ak_c @ self.qs[0:state_dim - 1, consensus_horizon] - Bk_c @ self.us[0:control_dim - 1, consensus_horizon]
         #
         # As.append(Ak_c)
         # Bs.append(Bk_c)
-        # gs.append(self.vals.gs[k_c])
+        # gs.append(self.vals.gs[consensus_horizon])
         #
         # for j in range(n_modes):
-        #     next_state_idx = k_c + (j * (N - k_c))
+        #     next_state_idx = consensus_horizon + (j * (horizon - consensus_horizon))
         #     self.model.subject_to(
-        #         ca.mtimes(As[k_c], self.q[0:n - 1, k_c]) + ca.mtimes(Bs[k_c], self.u[0:m - 1, k_c]) + gs[k_c] == self.q[0:n - 1, next_state_idx])
-        #     self.model.subject_to(dt * self.u[m - 1, k_c] + self.q[n - 1, k_c] == self.q[n - 1, next_state_idx])
+        #         ca.mtimes(As[consensus_horizon], self.q[0:state_dim - 1, consensus_horizon]) + ca.mtimes(Bs[consensus_horizon], self.u[0:control_dim - 1, consensus_horizon]) + gs[consensus_horizon] == self.q[0:state_dim - 1, next_state_idx])
+        #     self.model.subject_to(dt * self.u[control_dim - 1, consensus_horizon] + self.q[state_dim - 1, consensus_horizon] == self.q[state_dim - 1, next_state_idx])
         #
         # # Constraints for transitions for each parallel horizon "tail"
         # for j in range(n_modes):
@@ -207,42 +208,40 @@ class MPCProblem:
         #         self.model.subject_to(dt * self.u[m - 1, k] + self.q[n - 1, k] == self.q[n - 1, k + 1])
 
     def obstacle_constraints(self):
-            n_modes = self.vals.num_modes
-            N = self.vals.horizon
-            k_c = self.vals.consensus_horizon
-            # n_obs = self.vals.num_obstacles
-            N_obs = self.vals.obstacle_horizon
-            node_ids = self.scene.node_ids
-            S_q = self.vals.S_state
+        n_modes = self.vals.num_modes
+        horizon = self.vals.horizon
+        consensus_horizon = self.vals.consensus_horizon
+        # n_obs = self.vals.num_obstacles
+        obstacle_horizon = self.vals.obstacle_horizon
+        node_ids = self.scene.node_ids
+        S_q = self.vals.S_state
 
-            ps = []
-            p_obs = []
-            obs_on = [self.vals.obstacles[node_id].active for node_id in node_ids]
+        robot_position = []
+        obstacle_position = []
+        obs_on = [self.vals.obstacles[node_id].active for node_id in node_ids]
 
-            b = 3.0
-            for k in range(S_q):
-                self.vals.robot_positions[k] = self.qs[0:2, k]
-                ps.append(self.vals.robot_positions[k])
+        b = 3
+        for t in range(S_q):
+            self.vals.robot_positions[t] = self.qs[0:2, t]
+            robot_position.append(self.vals.robot_positions[t])
 
-            for j in range(n_modes):
-                for k in range(max(k_c, N_obs)):
-                    for i, node_id in enumerate(node_ids):
-                        if k < k_c:
-                            k_os = k
-                            p_obs.append(self.vals.obstacles[node_id].positions[j][k])
-                        else:
-                            idx_os = j * (N - k_c)  # TODO: if something gets wrong, check here
-                            k_os = k + idx_os
-                            p_obs.append(self.vals.obstacles[node_id].positions[j][k])
+        for j in range(n_modes):  # n_modes=1
+            for t in range(max(consensus_horizon, obstacle_horizon)):
+                for i, node_id in enumerate(node_ids):
+                    if t < consensus_horizon:
+                        t_offset = t
+                        obstacle_position.append(self.vals.obstacles[node_id].positions[j][t])
+                    else:
+                        idx_offset = j * (horizon - consensus_horizon)  # idx_offset is always zero if n_modes=1
+                        t_offset = t + idx_offset
+                        obstacle_position.append(self.vals.obstacles[node_id].positions[j][t])
+                    if obs_on[i]:
+                        a = (robot_position[t_offset] - obstacle_position[-1]) / np.linalg.norm(
+                            robot_position[t_offset] - obstacle_position[-1])
+                        a_mx = MX(a).T  # Convert 'a' from NumPy to MX type
+                        self.model.subject_to(a_mx @ (self.q[0:2, t_offset] - obstacle_position[-1]) >= b)
 
-                        a = (ps[k] - p_obs[-1]) / np.linalg.norm(ps[k] - p_obs[-1])
-                        a_mx = MX(a.T).T  # Convert 'a' from NumPy to MX type
-                        # test = obs_on[i] * mtimes(a_mx, (self.q[0:2, k_os] - p_obs[-1]))
-                        if obs_on[i]:
-                            self.model.subject_to(mtimes(a_mx, (self.q[0:2, k_os] - p_obs[-1])) >= b)
-                        # self.model.subject_to(obs_on[i] * (a.T @ (self.q[0:2, k_os] - p_obs[-1])) >= obs_on[i] * b)
-
-            return ps, p_obs, obs_on
+        # return ps, obstacle_position, obs_on
 
     def tracking_cost_matrices(self):
         S_q = self.vals.S_state
@@ -252,11 +251,14 @@ class MPCProblem:
             P0 = [self.qs[0, k], self.qs[1, k], self.qs[4, k]]  # X, Y, s of the initial guess
             spline_idx = find_spline_interval(P0[2], self.vals.path)
             if k in end_horizon_idces(self.vals):
-                ck = tracking_linear_term(P0, self.vals.terminal_contouring, self.vals.lag_cost, self.vals.path, spline_idx)
-                Γk = tracking_quadratic_term(P0, self.vals.terminal_contouring, self.vals.lag_cost, self.vals.path, spline_idx)
+                ck = tracking_linear_term(P0, self.vals.terminal_contouring, self.vals.lag_cost, self.vals.path,
+                                          spline_idx)
+                Γk = tracking_quadratic_term(P0, self.vals.terminal_contouring, self.vals.lag_cost, self.vals.path,
+                                             spline_idx)
             else:
                 ck = tracking_linear_term(P0, self.vals.contouring_cost, self.vals.lag_cost, self.vals.path, spline_idx)
-                Γk = tracking_quadratic_term(P0, self.vals.contouring_cost, self.vals.lag_cost, self.vals.path, spline_idx)
+                Γk = tracking_quadratic_term(P0, self.vals.contouring_cost, self.vals.lag_cost, self.vals.path,
+                                             spline_idx)
             cs.append(ck)
             Γs.append(Γk)
         self.vals.contouring_state = np.concatenate(cs)
@@ -274,7 +276,8 @@ class MPCProblem:
         # Tracking error
         P_array = MX(self.q[[0, 1, 4], :])  # X, Y, s of the initial guess
         P = P_array.reshape((-1, 1))
-        tracking_error =ca.mtimes([P.T, self.vals.linear_contouring_matrix, P]) + ca.mtimes([P.T, self.vals.contouring_state])
+        tracking_error = ca.mtimes([P.T, self.vals.linear_contouring_matrix, P]) + ca.mtimes(
+            [P.T, self.vals.contouring_state])
 
         # Control effort
         Δu = self.u[:, 1:] - self.u[:, :-1]
@@ -295,16 +298,34 @@ class MPCProblem:
 
     def solve(self):
         # Solve the optimization problem here
-        p_opts = {"expand": False}
+        p_opts = {"expand": True}
         s_opts = {"max_iter": 1000}
         self.model.solver('ipopt', p_opts, s_opts)
-        result = self.model.solve()
+        try:
+            # Attempt to solve the optimization problem
+            result = self.model.solve()
 
-        # status = self.model.solver.stats()['return_status']
-        # print(status)
-        return result.value(self.q), result.value(self.u)
+            return result.value(self.q), result.value(self.u)
+
+        except Exception as e:  # Catching all exceptions can help with debugging
+            print("An exception occurred: ", str(e))
+            q_val = self.model.debug.value(self.q)
+            u_val = self.model.debug.value(self.u)
+            print("q values at exception: ", q_val)
+            print("u values at exception: ", u_val)
+
+            # Retrieve the number of constraints
+            num_constraints = self.model.g.numel()
+            # Loop over each constraint and print its structure and value
+            for i in range(num_constraints):
+                # Get the symbolic representation of the constraint
+                con = self.model.g[i]
+                # Evaluate the constraint value using debug at the current iterate
+                con_value = self.model.debug.value(con)
+                print(f"Constraint {i}: {con} value at current iterate: {con_value}")
+
+            return None, None
 
 
 def update_problem(vals, qs, us):
-
     pass

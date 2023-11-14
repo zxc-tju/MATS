@@ -183,7 +183,7 @@ def update_obstacles_from_predictions(q_pred, present_node_ids, vals, scene, ite
     for mode in range(vals.num_modes):
         for history_node_id, obs in vals.obstacles.items():
             if history_node_id in present_node_ids:
-                node_idx = present_node_ids.index(history_node_id)
+                node_idx = present_node_ids.index(history_node_id) + 1  # very important: +1 to avoid robot node!
                 row_idx = node_idx * 4
                 vals.obstacles[history_node_id].positions[mode] = [
                     [q_pred[mode][row_idx, k] + scene.x_offset, q_pred[mode][row_idx + 1, k] + scene.y_offset] for k in

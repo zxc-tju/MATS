@@ -137,7 +137,7 @@ function obstacle_constraints!(model, q, qs, vals, scene)
         vals.ps[k] = qs[1:2, k]
         push!(ps, vals.ps[k])
     end
-
+    
     for j = 1:n_modes
         for k = 1:k_c
             for (i, node_id) in enumerate(node_ids)
