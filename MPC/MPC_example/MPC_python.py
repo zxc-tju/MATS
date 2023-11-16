@@ -14,10 +14,10 @@ import visualization
 # import helper as plotting_helper
 
 
-from MATS.MPC.python_scripts.utils import *
-from MATS.MPC.python_scripts.structs import *
-from MATS.MPC.python_scripts.path_handling import *
-from MATS.MPC.python_scripts.mpc import *
+from MPC.python_scripts.utils import *
+from MPC.python_scripts.structs import *
+from MPC.python_scripts.path_handling import *
+from MPC.python_scripts.mpc import *
 
 # load data
 env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full.pkl")

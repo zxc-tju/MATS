@@ -2,7 +2,7 @@ import autograd.numpy as np
 from autograd import grad
 from scipy.interpolate import CubicSpline
 
-from MATS.MPC.python_scripts.path_handling import find_spline_interval, spline_x, spline_y, heading
+from MPC.python_scripts.path_handling import find_spline_interval, spline_x, spline_y, heading
 
 
 def approx_contouring_error(P, path, spline_idx):

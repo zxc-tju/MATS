@@ -3,10 +3,10 @@ import casadi as ca
 from casadi import mtimes, MX
 from scipy.linalg import block_diag
 
-from MATS.MPC.python_scripts.path_handling import find_spline_interval, spline_x, spline_y, heading
-from MATS.MPC.python_scripts.dynamics import linearize_dynamics, discrete_dynamics
-from MATS.MPC.python_scripts.cost import tracking_linear_term, tracking_quadratic_term
-from MATS.MPC.python_scripts.utils import end_horizon_idces
+from MPC.python_scripts.path_handling import find_spline_interval, spline_x, spline_y, heading
+from MPC.python_scripts.dynamics import linearize_dynamics, discrete_dynamics
+from MPC.python_scripts.cost import tracking_linear_term, tracking_quadratic_term
+from MPC.python_scripts.utils import end_horizon_idces
 
 
 class MPCValues:
