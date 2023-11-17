@@ -68,9 +68,12 @@ qs, us = initial_guess(vals_obj)
 # construct problem
 mpc = MPCProblem(dynamics_obj, vals_obj, scene, qs, us)
 
+"Solve MPC"
+time_start = time.time()
 q_star, u_star = mpc.solve()
 print('output q', q_star[:, 0:3])
+print('time consumption: ', time.time() - time_start)
 # print(u_star)
 
+"Visualize Results"
 
-"Solve MPC"

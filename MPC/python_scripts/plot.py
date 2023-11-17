@@ -1,3 +1,6 @@
+import sys
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
@@ -6,10 +9,17 @@ import matplotlib.patches as patches
 from scipy.ndimage import rotate
 from scipy import linalg
 import seaborn as sns
+import torch
+import dill
+import json
 
 from nuscenes.nuscenes import NuScenes
 from nuscenes.prediction import PredictHelper
 from nuscenes.map_expansion.map_api import NuScenesMap
+
+sys.path.append("../../mats")
+from model.model_registrar import ModelRegistrar
+from model.mats import MATS
 
 
 line_colors = ['#375397',
@@ -25,6 +35,66 @@ cars = [plt.imread('icons/Car TOP_VIEW 375397.png'),
         plt.imread('icons/Car TOP_VIEW C8B0B0.png')]
 
 robot = plt.imread('icons/Car TOP_VIEW ROBOT.png')
+
+
+def load_model(model_dir, env, ts=100):
+    model_registrar = ModelRegistrar(model_dir, 'cpu')
+    model_registrar.load_models(ts)
+    with open(os.path.join(model_dir, 'config.json'), 'r') as config_json:
+        hyperparams = json.load(config_json)
+
+    mats = MATS(model_registrar, hyperparams, None, 'cpu')
+    return mats, hyperparams
+
+
+def load_data():
+    seed = 0
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    nuScenes_data_path = '/experiments/nuScenes/data'
+    nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=True)
+    helper = PredictHelper(nusc)
+
+    # ns_scene = nusc.get('scene', nusc.field2token('scene', 'name', 'scene-0024')[0])
+
+    layers = ['drivable_area',
+              'road_segment',
+              'lane',
+              'ped_crossing',
+              'walkway',
+              'stop_line',
+              'road_divider',
+              'lane_divider']
+
+    with open('../../experiments/processed/nuScenes_val_full.pkl', 'rb') as f:
+        env = dill.load(f, encoding='latin1')
+
+    # Modeling Loading
+    mats, hyperparams = load_model(
+        '../../experiments/nuScenes/models/models_26_Jul_2020_17_11_34_full_zeroRrows_batch8_fixed_edges',
+        env, ts=16)
+
+    for attention_radius_override in hyperparams['override_attention_radius']:
+        node_type1, node_type2, attention_radius = attention_radius_override.split(' ')
+        env.attention_radius[(node_type1, node_type2)] = float(attention_radius)
+
+    if env.robot_type is None and hyperparams['incl_robot_node']:
+        env.robot_type = env.NodeType[15]  # TODO: Make more general, allow the user to specify?
+        for scene in env.scenes:
+            scene.add_robot_from_nodes(env.robot_type,
+                                       hyperparams=hyperparams,
+                                       min_timesteps=hyperparams['minimum_history_length'] + 1 + hyperparams[
+                                           'prediction_horizon'])
+
+    mats.set_environment(env)
+    mats.set_annealing_params()
+
+    scenes = env.scenes
+
+    return scenes
 
 
 def prediction_output_to_trajectories(prediction_output_dict,

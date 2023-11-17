@@ -72,11 +72,11 @@ torch.manual_seed(seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(seed)
 
-nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/v1.0-mini'
-nusc = NuScenes(version='v1.0-mini', dataroot=nuScenes_data_path, verbose=True)
+nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'
+nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=True)
 helper = PredictHelper(nusc)
 
-ns_scene = nusc.get('scene', nusc.field2token('scene', 'name', 'scene-0757')[0])
+# ns_scene = nusc.get('scene', nusc.field2token('scene', 'name', 'scene-0024')[0])
 
 layers = ['drivable_area',
           'road_segment',
@@ -87,7 +87,7 @@ layers = ['drivable_area',
           'road_divider',
           'lane_divider']
 
-with open('../processed/nuScenes_mini_val_full.pkl', 'rb') as f:
+with open('../processed/nuScenes_val_full.pkl', 'rb') as f:
     env = dill.load(f, encoding='latin1')
 
 # Modeling Loading
@@ -119,17 +119,10 @@ for scene in tqdm(scenes):
 ph = hyperparams['prediction_horizon']
 max_hl = hyperparams['maximum_history_length']
 
-for idx, scene in enumerate(scenes):
-    if ns_scene['first_sample_token'] in scene.sample_tokens:
-        print(idx)
-        break
 
-# Good ones are: 23, 5,
-#   At timestep: 10, 54,
-scene = scenes[0]  # np.random.choice(scenes)
-timestep = np.array([20])  # scene.sample_timesteps(1, min_future_timesteps=ph, min_history_length=max_hl)
+scene = scenes[5]  # np.random.choice(scenes)
+timestep = np.array([30])  # scene.sample_timesteps(1, min_future_timesteps=ph, min_history_length=max_hl)
 
-time1 = time.perf_counter()
 # Get Prediction Results
 mats_outputs = list()
 with torch.no_grad():
@@ -145,36 +138,6 @@ prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectorie
                                                                                   max_hl,
                                                                                   ph,
                                                                                   map=None)
-time2 = time.perf_counter()
-print(time2-time1)
-
-
-# ZXC add
-# batch_num = 0
-# num_samples = As[batch_num].shape[1]
-# num_components = As[batch_num].shape[2]
-# num_agents = batch[0][0]
-# full_state_dim = As[batch_num].shape[-1]
-#
-# x_inits, prev_x_inits, robot_future_actions_st_t = batch[-4:-1]
-# x_inits = x_inits.to(mats.device)
-# prev_x_inits = prev_x_inits.to(mats.device)
-# robot_future_actions_st_t = robot_future_actions_st_t.to(mats.device)
-# means = torch.full((ph, num_samples, num_components, full_state_dim), np.nan,
-#                    dtype=torch.float, device=mats.device)
-#
-# for timestep in range(ph):
-#     A = As[batch_num][timestep].clone()
-#     B = Bs[batch_num][timestep].clone()
-#
-#     x = x_inits if timestep == 0 else means[timestep - 1].clone()
-#     u_r = robot_future_actions_st_t[batch_num][timestep]
-#     u_a = np.zeros((num_samples, num_components, num_agents * 2))
-#
-#     means[timestep] = (A @ x.unsqueeze(-1)).squeeze(-1) + affine_terms[batch_num][timestep]
-#     if True: #include_B
-#         means[timestep] += B @ u_r
-# ZXC add
 
 # Define ROI in nuScenes Map
 nusc_map = NuScenesMap(dataroot=nuScenes_data_path, map_name=helper.get_map_name_from_sample_token(scene.name))
@@ -207,7 +170,7 @@ for idx in trange(len(mats_outputs)):
     #                                    x_min=scene.x_min,
     #                                    y_min=scene.y_min)
 
-    plotting_helper.plot_vehicle_nice(ax,
+    plotting_helper.plot_vehicle_dist(ax,
                                       pred_dists,
                                       scene,
                                       max_hl=max_hl,
