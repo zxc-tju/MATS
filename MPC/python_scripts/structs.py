@@ -19,7 +19,7 @@ class Node:
 
 
 class Scene:
-    def __init__(self, robot, non_robot_nodes, dt, timesteps, node_ids, x_offset, y_offset):
+    def __init__(self, robot, non_robot_nodes, dt, timesteps, node_ids, x_offset, y_offset, scene_name):
         self.robot = robot
         self.non_robot_nodes = non_robot_nodes
         self.dt = dt
@@ -27,6 +27,7 @@ class Scene:
         self.node_ids = node_ids
         self.x_offset = x_offset
         self.y_offset = y_offset
+        self.name = scene_name
 
 
 def create_scene(env, scene_num: int):
@@ -35,6 +36,7 @@ def create_scene(env, scene_num: int):
     non_robot_nodes = []
     x_offset = env.scenes[scene_num].x_min
     y_offset = env.scenes[scene_num].y_min
+    scene_name = env.scenes[scene_num].name
     for node in env.scenes[scene_num].nodes:
         if node.is_robot:
             x = [item[0] + x_offset for item in node.data.data]
@@ -62,7 +64,44 @@ def create_scene(env, scene_num: int):
     timesteps = env.scenes[scene_num].timesteps
     node_ids = [str(node.id) for node in non_robot_nodes]
 
-    return Scene(robot, non_robot_nodes, dt, timesteps, node_ids, x_offset, y_offset)
+    return Scene(robot, non_robot_nodes, dt, timesteps, node_ids, x_offset, y_offset, scene_name)
+
+
+def get_scene_info(env, scene_num: int):
+    # information about agents in scene
+    robot = None
+    non_robot_nodes = []
+    x_offset = env.scenes[scene_num].x_min
+    y_offset = env.scenes[scene_num].y_min
+    scene_name = env.scenes[scene_num].name
+    for node in env.scenes[scene_num].nodes:
+        if node.is_robot:
+            x = [item[0] + x_offset for item in node.data.data]
+            y = [item[1] + y_offset for item in node.data.data]
+            theta = [item[8] for item in node.data.data]
+            v = [item[10] for item in node.data.data]
+            first_timestep = node.first_timestep
+            last_timestep = node.last_timestep
+            type_ = node.type.name
+            id_ = node.id
+            robot = Node(x, y, theta, v, first_timestep, last_timestep, type_, id_)
+        else:
+            x = [item[0] + x_offset for item in node.data.data]
+            y = [item[1] + y_offset for item in node.data.data]
+            theta = []
+            v = []
+            first_timestep = node.first_timestep
+            last_timestep = node.last_timestep
+            type_ = node.type.name
+            id_ = node.id
+            non_robot_nodes.append(Node(x, y, theta, v, first_timestep, last_timestep, type_, id_))
+
+    # possibly useful metadata
+    dt = env.scenes[scene_num].dt
+    timesteps = env.scenes[scene_num].timesteps
+    node_ids = [str(node.id) for node in non_robot_nodes]
+
+    return robot, non_robot_nodes, node_ids
 
 
 class ControlLimits:
@@ -88,7 +127,7 @@ class Obstacle:
         self.active = active
 
 
-def init_node_obstacles(scene, vals):
-    for node_id in scene.node_ids:
+def init_node_obstacles(node_ids, vals):
+    for node_id in node_ids:
         obstacle_positions = [[[0., 0.] for _ in range(vals.obstacle_horizon)] for _ in range(vals.num_modes)]
         vals.obstacles[node_id] = Obstacle(obstacle_positions)

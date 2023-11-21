@@ -66,13 +66,15 @@ def predict(mats, hyperparams, scene, timestep, num_modes):
     ph = hyperparams['prediction_horizon']
 
     with torch.no_grad():
-        pred_dists, non_rob_rows, As, Bs, Qs, affine_terms, state_lengths_in_order = mats.predict(
+        mats_outputs = mats.predict(
             scene,
             np.array([timestep]),
             ph,
             min_future_timesteps=ph,
             include_B=hyperparams['include_B'],
             zero_R_rows=hyperparams['zero_R_rows'])
+
+    pred_dists, non_rob_rows, As, Bs, Qs, affine_terms, state_lengths_in_order = mats_outputs
 
     A = As[0].numpy()
     B = Bs[0].numpy()
@@ -104,7 +106,7 @@ def predict(mats, hyperparams, scene, timestep, num_modes):
                      'B': B[:, 0, rank_order[:num_modes]],
                      'affine_terms': affine_terms[:, 0, rank_order[:num_modes]]}
 
-    return prediction_info, dynamics_dict
+    return prediction_info, dynamics_dict, mats_outputs
 
 
 import numpy as np
@@ -112,11 +114,11 @@ import numpy as np
 
 def predicted_dynamics(pred_settings, scene_num, timestep):
     # Call the predict function from python_utils module
-    prediction_info, dynamics_dict = predict(pred_settings.mats,
-                                             pred_settings.hyperparams,
-                                             pred_settings.env.scenes[scene_num],
-                                             timestep - 1,
-                                             pred_settings.num_modes)
+    prediction_info, dynamics_dict, mats_outputs = predict(pred_settings.mats,
+                                                           pred_settings.hyperparams,
+                                                           pred_settings.env.scenes[scene_num],
+                                                           timestep - 1,
+                                                           pred_settings.num_modes)
 
     # Retrieve the prediction horizon and number of modes from settings
     pred_horizon = pred_settings.hyperparams.get("prediction_horizon")
@@ -149,7 +151,7 @@ def predicted_dynamics(pred_settings, scene_num, timestep):
                robot.data.data[timestep, 10]]  # v
     q0[:state_dim] = q_robot
 
-    return Aps, Bps, gps, q0, ordered_node_ids
+    return Aps, Bps, gps, q0, ordered_node_ids, mats_outputs
 
 
 import numpy as np
@@ -186,7 +188,7 @@ def update_obstacles_from_predictions(q_pred, present_node_ids, vals, scene, ite
                 node_idx = present_node_ids.index(history_node_id) + 1  # very important: +1 to avoid robot node!
                 row_idx = node_idx * 4
                 vals.obstacles[history_node_id].positions[mode] = [
-                    [q_pred[mode][row_idx, k] + scene.x_offset, q_pred[mode][row_idx + 1, k] + scene.y_offset] for k in
+                    [q_pred[mode][row_idx, k] + scene.x_min, q_pred[mode][row_idx + 1, k] + scene.y_min] for k in
                     range(vals.obstacle_horizon)]
                 vals.obstacles[history_node_id].active = True
                 obstacle_heading[history_node_id].append(q_pred[mode][row_idx + 2, :])

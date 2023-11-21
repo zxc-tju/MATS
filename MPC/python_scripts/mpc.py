@@ -17,7 +17,7 @@ class MPCValues:
                  terminal_contouring: float = 5.0,
                  lag_cost: float = 5.0, progress_reward: float = 0.01, yaw_rate_change: float = 0.01,
                  acceleration_change: float = 0.01, path_velocity_change: float = 0.01,
-                 obstacle_horizon: int = 13):
+                 obstacle_horizon: int = 7):
 
         if initial_state is None:
             initial_state = np.array([0.0, 0.0, 0.0, 1.0, 0.0])
@@ -99,10 +99,10 @@ def initial_guess(vals, v0=None):
 
 
 class MPCProblem:
-    def __init__(self, dynamics, vals, scene, qs, us):
+    def __init__(self, dynamics, vals, non_robot_node_ids, qs, us):
         self.dynamics = dynamics
         self.vals = vals
-        self.scene = scene
+        self.non_robot_node_ids = non_robot_node_ids
         self.model = ca.Opti()
         self.q = self.model.variable(vals.state_dim, vals.S_state)
         self.u = self.model.variable(vals.control_dim, vals.S_control)
@@ -213,7 +213,7 @@ class MPCProblem:
         consensus_horizon = self.vals.consensus_horizon
         # n_obs = self.vals.num_obstacles
         obstacle_horizon = self.vals.obstacle_horizon
-        node_ids = self.scene.node_ids
+        node_ids = self.non_robot_node_ids
         S_q = self.vals.S_state
 
         robot_position = []
