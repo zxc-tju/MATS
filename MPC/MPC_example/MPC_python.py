@@ -3,8 +3,8 @@ import os
 import time
 import matplotlib.pyplot as plt
 
-sys.path.append("../../mats")
-from utils import prediction_output_to_trajectories
+# sys.path.append("../../mats")
+from mats.utils import prediction_output_to_trajectories
 from tqdm import tqdm, trange
 from nuscenes.nuscenes import NuScenes
 from nuscenes.prediction import PredictHelper
@@ -22,12 +22,14 @@ import MPC.python_scripts.plot as plotting_helper
 env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full.pkl")
 
 # load model
-# model_path = "../../experiments/nuScenes/models/models_21_Jul_2020_10_25_10_full_zeroRrows_batch8_double_fixed_a_norm"
-# mats, hyperparams = load_model(model_path, env, ts=11)
-
 mats, hyperparams = load_model('../../experiments/nuScenes/models'
                                '/models_26_Jul_2020_17_11_34_full_zeroRrows_batch8_fixed_edges',
                                env, ts=16)
+
+mats.set_environment(env)
+mats.set_annealing_params()
+ph = hyperparams['prediction_horizon']
+max_hl = hyperparams['maximum_history_length']
 
 for attention_radius_override in hyperparams['override_attention_radius']:
     node_type1, node_type2, attention_radius = attention_radius_override.split(' ')
@@ -41,20 +43,30 @@ if env.robot_type is None and hyperparams['incl_robot_node']:
                                    min_timesteps=hyperparams['minimum_history_length'] + 1 + hyperparams[
                                        'prediction_horizon'])
 
-mats.set_environment(env)
-mats.set_annealing_params()
-
 scenes = env.scenes
 
-ph = hyperparams['prediction_horizon']
-max_hl = hyperparams['maximum_history_length']
-
+# Data for plots
+# nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
+nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
+layers = ['drivable_area',
+          'road_segment',
+          'lane',
+          'ped_crossing',
+          'walkway',
+          'stop_line',
+          'road_divider',
+          'lane_divider']
 
 if not os.path.isdir('./data'):
     os.mkdir('./data')
 
 if not os.path.isdir('./plots'):
     os.mkdir('./plots')
+
+" ==== Prepare Data Recording ==== "
+mats_outputs_collection = []
+robot_state_collection = []
+t_range = range(2, 10)
 
 " ==== Select Scene ==== "
 # select scene
@@ -64,20 +76,26 @@ scene.calculate_scene_graph(env.attention_radius,
                             hyperparams['edge_addition_filter'],
                             hyperparams['edge_removal_filter'])
 
-robot_node, non_robot_nodes, non_robot_node_ids = get_scene_info(env, scene_num)
-
-# Data for plots
-nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'
+# Prepare nuscenes map for selected scene
 nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=True)
 helper = PredictHelper(nusc)
 nusc_map = NuScenesMap(dataroot=nuScenes_data_path, map_name=helper.get_map_name_from_sample_token(scene.name))
 
-" ==== MPC settings ==== "
-# # select time interval
-# first_ts = 2
-# # last_ts = scene.timesteps
+robot_node, non_robot_nodes, non_robot_node_ids = get_scene_info(env, scene_num)
 
-for first_ts in tqdm(range(2, 10)):
+
+# Configure figure center
+x_center = robot_node.x[t_range[0]]
+y_center = robot_node.y[t_range[0]]
+x_min = scene.x_min + x_center - 100.0
+y_min = scene.y_min + y_center - 50.0
+x_max = scene.x_min + x_center + 100.0
+y_max = scene.y_min + y_center + 100.0
+
+my_patch = (x_min, y_min, x_max, y_max)
+
+" ==== MPC settings ==== "
+for first_ts in tqdm(t_range):
     # model prediction settings
     num_modes = 1
     pred_settings = PredictionSettings(mats, hyperparams, env, num_modes)
@@ -100,65 +118,51 @@ for first_ts in tqdm(range(2, 10)):
     init_node_obstacles(non_robot_node_ids, vals_obj)
     Aps, Bps, gps, q_pred0, nodes_present, mats_outputs = predicted_dynamics(pred_settings, scene_num, first_ts)
     u_pred = get_recorded_robot_controls(pred_settings, scene_num, first_ts)
-    q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in range(0, vals_obj.num_modes)]
+    q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in
+              range(0, vals_obj.num_modes)]
     update_obstacles_from_predictions(q_pred, nodes_present, vals_obj, scene)
 
+    # save prediction results
+    mats_outputs_collection.append(mats_outputs)
+
     # initial solution guess
-    qs, us = initial_guess(vals_obj)
+    initial_state, initial_control = initial_guess(vals_obj)
 
     # construct problem
-    mpc = MPCProblem(dynamics_obj, vals_obj, non_robot_node_ids, qs, us)
+    mpc = MPCProblem(dynamics_obj, vals_obj, non_robot_node_ids, initial_state, initial_control)
 
     " ==== Solve MPC ==== "
     time_start = time.time()
-    q_star, u_star = mpc.solve()
-    print('output q', q_star[:, 0:3])
+    state_star, control_star = mpc.solve()
+    print('output states', state_star[:, 0:3])
     print('time consumption: ', time.time() - time_start)
-    # print(u_star)
 
-    " ==== Visualize Results ==== "
+    robot_state_collection.append(state_star)
 
-    pred_dists, non_rob_rows, As, Bs, Qs, affine_terms, state_lengths_in_order = mats_outputs
-    prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(pred_dists,
-                                                                                      max_hl,
-                                                                                      ph,
-                                                                                      map=None)
 
-    ts_key = list(prediction_dict.keys())[0]
-    histories_dict = histories_dict[ts_key]
-    node = list(histories_dict.keys())[0]
-    histories_one_step = histories_dict[node][0]
-    x_min = scene.x_min + histories_one_step[0] - 100.0
-    y_min = scene.y_min + histories_one_step[1] - 50.0
-    x_max = scene.x_min + histories_one_step[0] + 100.0
-    y_max = scene.y_min + histories_one_step[1] + 100.0
+" ==== Visualize Results ==== "
+pred_dists = mats_outputs_collection[0][0]
 
-    # Plot predicted timestep for random scene in map
-    my_patch = (x_min, y_min, x_max, y_max)
-    layers = ['drivable_area',
-              'road_segment',
-              'lane',
-              'ped_crossing',
-              'walkway',
-              'stop_line',
-              'road_divider',
-              'lane_divider']
+prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(pred_dists,
+                                                                                  max_hl,
+                                                                                  ph,
+                                                                                  map=None)
 
-    fig, ax = nusc_map.render_map_patch(my_patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
+fig, ax = nusc_map.render_map_patch(my_patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
 
-    # Plot predicted timestep
-    plotting_helper.plot_vehicle_dist(ax,
-                                      pred_dists,
-                                      scene,
-                                      max_hl=max_hl,
-                                      ph=ph,
-                                      x_min=scene.x_min,
-                                      y_min=scene.y_min,
-                                      line_width=0.5,
-                                      car_img_zoom=0.02,
-                                      robot_plan=q_star)
+# Plot predicted timestep
+plotting_helper.plot_vehicle_dist(ax,
+                                  pred_dists,
+                                  scene,
+                                  max_hl=max_hl,
+                                  ph=ph,
+                                  x_min=scene.x_min,
+                                  y_min=scene.y_min,
+                                  line_width=0.5,
+                                  car_img_zoom=0.02,
+                                  robot_plan=robot_state_collection)
 
-    ax.set_ylim(y_min, y_max)
-    ax.set_xlim(x_min, x_max)
-    # plt.show()
-    fig.savefig('plots/scene_'+str(scene_num)+'_t_'+str(first_ts)+'.png', dpi=300, bbox_inches='tight')
+ax.set_ylim(y_min, y_max)
+ax.set_xlim(x_min, x_max)
+# plt.show()
+fig.savefig('plots/scene_'+str(scene_num)+'_t_'+str(first_ts)+'.png', dpi=300, bbox_inches='tight')

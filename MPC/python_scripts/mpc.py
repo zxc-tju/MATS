@@ -54,9 +54,9 @@ class MPCValues:
         self.linear_contouring = [np.zeros((3, 3)) for _ in range(self.S_state)]  # Γs
         self.contouring_state = np.zeros(3 * self.S_state)  # c
         self.linear_contouring_matrix = np.zeros((3 * self.S_state, 3 * self.S_state))  # Γ
-        self.gs = [np.zeros(state_dim) for _ in range(self.S_discrete)]
-        self.As = [np.zeros((state_dim, state_dim)) for _ in range(self.S_discrete)]
-        self.Bs = [np.zeros((state_dim, control_dim)) for _ in range(self.S_discrete)]
+        self.gs = [np.zeros(state_dim) for _ in range(self.S_discrete)]  # linearization point
+        self.As = [np.zeros((state_dim, state_dim)) for _ in range(self.S_discrete)]  # dynamics matrices
+        self.Bs = [np.zeros((state_dim, control_dim)) for _ in range(self.S_discrete)]  # input matrices
         self.robot_positions = [np.zeros(2) for _ in range(self.S_state)]
         self.obstacles = dict()
         self.obstacle_indicator = [False for _ in range(num_obstacles)]
@@ -106,7 +106,7 @@ class MPCProblem:
         self.model = ca.Opti()
         self.q = self.model.variable(vals.state_dim, vals.S_state)
         self.u = self.model.variable(vals.control_dim, vals.S_control)
-        self.qs = qs
+        self.qs = qs  # [x, y, heading, v, s]
         self.us = us
         self.construct_problem()
 

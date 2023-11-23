@@ -109,9 +109,6 @@ def predict(mats, hyperparams, scene, timestep, num_modes):
     return prediction_info, dynamics_dict, mats_outputs
 
 
-import numpy as np
-
-
 def predicted_dynamics(pred_settings, scene_num, timestep):
     # Call the predict function from python_utils module
     prediction_info, dynamics_dict, mats_outputs = predict(pred_settings.mats,
@@ -154,8 +151,6 @@ def predicted_dynamics(pred_settings, scene_num, timestep):
     return Aps, Bps, gps, q0, ordered_node_ids, mats_outputs
 
 
-import numpy as np
-
 
 # TODO: hard coded indices
 # TODO: check direction of accel vector so there's nothing weird happening with accel norm
@@ -195,9 +190,9 @@ def update_obstacles_from_predictions(q_pred, present_node_ids, vals, scene, ite
             else:
                 vals.obstacles[history_node_id].active = False
 
-    # Save obstacle heading data
-    filename = f"data/obstacle_heading_iteration_{1 if iter is None else iter}"
-    np.save(filename, obstacle_heading)
+    # # Save obstacle heading data
+    # filename = f"data/obstacle_heading_iteration_{1 if iter is None else iter}"
+    # np.save(filename, obstacle_heading)
 
 
 def end_horizon_idces(vals):
