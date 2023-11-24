@@ -1,14 +1,14 @@
 import torch
 import numpy as np
-from model.mgcvae import ASubmodel, BQSubmodel
-from model.dataset import get_timesteps_data
-from model.model_utils import mutual_inf_mc, sigmoid_anneal
-from model.components import GMM2D
-import model.dynamics as dynamic_module
+from mats.model.mgcvae import ASubmodel, BQSubmodel
+from mats.model.dataset import get_timesteps_data
+from mats.model.model_utils import mutual_inf_mc, sigmoid_anneal
+from mats.model.components import GMM2D
+import mats.model.dynamics as dynamic_module
 import torch.distributions as td
-import model.anneal_scheduling as anneal_helper
-from utils import calculate_A_slices, calculate_BQ_slices
-from environment import derivative_of
+import mats.model.anneal_scheduling as anneal_helper
+from mats.utils import calculate_A_slices, calculate_BQ_slices
+from mats.environment import derivative_of
 
 
 class MATS(object):

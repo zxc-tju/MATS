@@ -23,13 +23,13 @@ sys.path.append("../../mats")
 
 
 line_colors = ['#375397',
-#                '#F05F78',
+               #                '#F05F78',
                '#80CBE5',
                '#ABCB51',
                '#C8B0B0']
 
 cars = [plt.imread('../images/icons/Car TOP_VIEW 375397.png'),
-#         plt.imread('../images/icons/Car TOP_VIEW F05F78.png'),
+        #         plt.imread('../images/icons/Car TOP_VIEW F05F78.png'),
         plt.imread('../images/icons/Car TOP_VIEW 80CBE5.png'),
         plt.imread('../images/icons/Car TOP_VIEW ABCB51.png'),
         plt.imread('../images/icons/Car TOP_VIEW C8B0B0.png')]
@@ -42,7 +42,6 @@ def prediction_output_to_trajectories(prediction_output_dict,
                                       ph,
                                       map=None,
                                       prune_ph_to_future=False):
-
     prediction_timesteps = prediction_output_dict.keys()
 
     output_dict = dict()
@@ -394,3 +393,181 @@ def plot_vehicle_dist(ax, predictions, scene,
     veh_box = AnnotationBbox(oi, (history[-1, 0], history[-1, 1]), frameon=False)
     veh_box.zorder = 700
     ax.add_artist(veh_box)
+
+
+def plot_multi_frame_dist(fig, ax, mats_outputs_collection, scene,
+                          max_hl=10, ph=6,
+                          nuscenes_map=None, x_min=0, y_min=0,
+                          line_alpha=0.8,
+                          line_width=0.2, edge_width=2,
+                          circle_edge_width=0.5, node_circle_size=0.3,
+                          car_img_zoom=0.01, pi_threshold=0.05,
+                          robot_plan=None, scene_num=None):
+    for t in range(len(mats_outputs_collection)):
+        predictions = mats_outputs_collection[t][0]
+        prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(predictions,
+                                                                                          max_hl,
+                                                                                          ph,
+                                                                                          map=nuscenes_map)
+
+        ts_key = 1
+
+        prediction_dict = prediction_dict[ts_key]
+        histories_dict = histories_dict[ts_key]
+        futures_dict = futures_dict[ts_key]
+
+        if nuscenes_map is not None:
+            ax.imshow(nuscenes_map.fdata, origin='lower', alpha=0.5)
+
+        cmap = ['k', 'b', 'y', 'g', 'r']
+        i = 0
+        node_list = sorted(histories_dict.keys(), key=lambda x: x.id)
+        for node in node_list:
+            history = histories_dict[node] + np.array([x_min, y_min])
+            future = futures_dict[node] + np.array([x_min, y_min])
+            predictions = prediction_dict[node]
+            pis = predictions.pis  # is this the possibility of a mode
+
+            if node.type.name == 'VEHICLE':
+                ax.plot(future[:, 0],
+                        future[:, 1],
+                        'w--o',
+                        linewidth=4,
+                        markersize=3,
+                        zorder=650,
+                        path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
+
+                for mode_idx in range(predictions.mixture_distribution.param_shape[-1]):
+                    pi = pis[mode_idx].item()
+                    if pi < pi_threshold:
+                        continue
+
+                    # plot_GMM(means, )
+
+                    means = predictions.component_distribution.mean[:, 0, mode_idx, :2] + np.array([x_min, y_min])
+                    covs = predictions.component_distribution.covariance_matrix[:, 0, mode_idx, :2, :2]
+
+                    ax.plot(means[..., 0], means[..., 1],
+                            '-o', markersize=3,
+                            color=cmap[1],
+                            linewidth=line_width,
+                            alpha=line_alpha,
+                            zorder=620)
+
+                    for timestep in range(means.shape[0]):
+                        mean = means[timestep]
+                        covar = covs[timestep]
+
+                        v, w = linalg.eigh(covar)
+                        v = 2. * np.sqrt(2.) * np.sqrt(v)
+                        u = w[0] / linalg.norm(w[0])
+
+                        # Plot an ellipse to show the Gaussian component
+                        angle = np.arctan2(u[1], u[0])
+                        angle = 180. * angle / np.pi  # convert to degrees
+                        ell = patches.Ellipse(mean, v[0], v[1], 180. + angle, color='blue', zorder=600)
+                        ell.set_edgecolor(None)
+                        ell.set_clip_box(ax.bbox)
+                        ell.set_alpha(pi / 3.)
+                        ax.add_artist(ell)
+
+                vel = node.get(np.array([ts_key]), {'velocity': ['x', 'y']})
+                h = np.arctan2(vel[0, 1], vel[0, 0])
+                r_img = rotate(cars[i % len(cars)], node.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi,
+                               reshape=True)
+                oi = OffsetImage(r_img, zoom=car_img_zoom, zorder=700)
+                veh_box = AnnotationBbox(oi, (history[-1, 0], history[-1, 1]), frameon=False)
+                veh_box.zorder = 700
+                ax.add_artist(veh_box)
+                i += 1
+            else:
+                for mode_idx in range(predictions.mixture_distribution.param_shape[-1]):
+                    pi = pis[mode_idx].item()
+                    if pi < pi_threshold:
+                        continue
+
+                    means = predictions.component_distribution.mean[:, 0, mode_idx, :2] + np.array([x_min, y_min])
+                    covs = predictions.component_distribution.covariance_matrix[:, 0, mode_idx, :2, :2]
+
+                    ax.plot(means[..., 0], means[..., 1],
+                            '-o', markersize=3,
+                            color=cmap[1],
+                            linewidth=line_width,
+                            alpha=line_alpha,
+                            zorder=620)
+
+                    for timestep in range(means.shape[0]):
+                        mean = means[timestep]
+                        covar = covs[timestep]
+
+                        v, w = linalg.eigh(covar)
+                        v = 2. * np.sqrt(2.) * np.sqrt(v)
+                        u = w[0] / linalg.norm(w[0])
+
+                        # Plot an ellipse to show the Gaussian component
+                        angle = np.arctan2(u[1], u[0])
+                        angle = 180. * angle / np.pi  # convert to degrees
+                        ell = patches.Ellipse(mean, v[0], v[1], 180. + angle, color='blue', zorder=600)
+                        ell.set_edgecolor(None)
+                        ell.set_clip_box(ax.bbox)
+                        ell.set_alpha(pi / 3.)
+                        ax.add_artist(ell)
+
+                ax.plot(future[:, 0],
+                        future[:, 1],
+                        'w--',
+                        zorder=650,
+                        path_effects=[pe.Stroke(linewidth=edge_width, foreground='k'), pe.Normal()])
+
+                # Current Node Position
+                circle = plt.Circle((history[-1, 0],
+                                     history[-1, 1]),
+                                    node_circle_size,
+                                    facecolor='g',
+                                    edgecolor='k',
+                                    lw=circle_edge_width,
+                                    zorder=3)
+                ax.add_artist(circle)
+
+        # Visualizing the ego-vehicle as well.
+        position_state = {'position': ['x', 'y']}
+        history = scene.robot.get(np.array([ts_key - max_hl, ts_key]), position_state)  # History includes current pos
+        history = history[~np.isnan(history.sum(axis=1))]
+        history += np.array([x_min, y_min])
+
+        future = scene.robot.get(np.array([ts_key + 1, ts_key + ph]), position_state)
+        future = future[~np.isnan(future.sum(axis=1))]
+        future += np.array([x_min, y_min])
+
+        ax.plot(future[:, 0],
+                future[:, 1],
+                'r-o',
+                linewidth=4,
+                markersize=3,
+                zorder=650,
+                path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
+
+        if robot_plan is not None:
+            future_plan = robot_plan[t][0:2, :6]
+            future_plan = future_plan.T
+            ax.plot(future_plan[:, 0],
+                    future_plan[:, 1],
+                    'r--o',
+                    linewidth=4,
+                    markersize=3,
+                    zorder=650,
+                    path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
+
+        vel = scene.robot.get(np.array([ts_key]), {'velocity': ['x', 'y']})
+        h = np.arctan2(vel[0, 1], vel[0, 0])
+        r_img = rotate(robot, scene.robot.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi,
+                       reshape=True)
+        oi = OffsetImage(r_img, zoom=car_img_zoom, zorder=700)
+        veh_box = AnnotationBbox(oi, (history[-1, 0], history[-1, 1]), frameon=False)
+        veh_box.zorder = 700
+        ax.add_artist(veh_box)
+
+        # ax.set_ylim(y_min, y_max)
+        # ax.set_xlim(x_min, x_max)
+        # plt.show()
+        fig.savefig('plots/scene_' + str(scene_num) + '_t_' + str(t) + '.png', dpi=300, bbox_inches='tight')

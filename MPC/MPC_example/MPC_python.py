@@ -16,7 +16,6 @@ from MPC.python_scripts.path_handling import *
 from MPC.python_scripts.mpc import *
 import MPC.python_scripts.plot as plotting_helper
 
-
 " ==== Prepare model and data ==== "
 # load data
 env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full.pkl")
@@ -83,7 +82,6 @@ nusc_map = NuScenesMap(dataroot=nuScenes_data_path, map_name=helper.get_map_name
 
 robot_node, non_robot_nodes, non_robot_node_ids = get_scene_info(env, scene_num)
 
-
 # Configure figure center
 x_center = robot_node.x[t_range[0]]
 y_center = robot_node.y[t_range[0]]
@@ -139,30 +137,17 @@ for first_ts in tqdm(t_range):
 
     robot_state_collection.append(state_star)
 
-
 " ==== Visualize Results ==== "
-pred_dists = mats_outputs_collection[0][0]
-
-prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(pred_dists,
-                                                                                  max_hl,
-                                                                                  ph,
-                                                                                  map=None)
+# pred_dists = mats_outputs_collection[0][0]
 
 fig, ax = nusc_map.render_map_patch(my_patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
 
 # Plot predicted timestep
-plotting_helper.plot_vehicle_dist(ax,
-                                  pred_dists,
-                                  scene,
-                                  max_hl=max_hl,
-                                  ph=ph,
-                                  x_min=scene.x_min,
-                                  y_min=scene.y_min,
-                                  line_width=0.5,
-                                  car_img_zoom=0.02,
-                                  robot_plan=robot_state_collection)
+plotting_helper.plot_multi_frame_dist(fig, ax, mats_outputs_collection, scene, max_hl=max_hl, ph=ph, x_min=scene.x_min,
+                                      y_min=scene.y_min, line_width=0.5, car_img_zoom=0.02,
+                                      robot_plan=robot_state_collection, scene_num=scene_num)
 
 ax.set_ylim(y_min, y_max)
 ax.set_xlim(x_min, x_max)
 # plt.show()
-fig.savefig('plots/scene_'+str(scene_num)+'_t_'+str(first_ts)+'.png', dpi=300, bbox_inches='tight')
+fig.savefig('plots/scene_' + str(scene_num) + '_t_' + str(first_ts) + '.png', dpi=300, bbox_inches='tight')
