@@ -45,8 +45,8 @@ if env.robot_type is None and hyperparams['incl_robot_node']:
 scenes = env.scenes
 
 # Data for plots
-nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
-# nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
+# nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
+nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
 layers = ['drivable_area',
           'road_segment',
           'lane',
@@ -93,24 +93,28 @@ y_max = y_center + 75.0
 my_patch = (x_min, y_min, x_max, y_max)
 
 " ==== MPC settings ==== "
-for first_ts in tqdm(t_range):
-    # model prediction settings
-    num_modes = 1
-    pred_settings = PredictionSettings(mats, hyperparams, env, num_modes)
+# model prediction settings
+num_modes = 1
+pred_settings = PredictionSettings(mats, hyperparams, env, num_modes)
 
-    # get path data
-    x_coefs_var, y_coefs_var, breaks_var = load_splines()
-    path_obj = SplinePath(x_coefs_var, y_coefs_var, breaks_var)
+# get path data
+x_coefs_var, y_coefs_var, breaks_var = load_splines()
+path_obj = SplinePath(x_coefs_var, y_coefs_var, breaks_var)
+
+# MPC parameters, constraints and settings
+control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
+dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
+
+" ==== MPC process ==== "
+for first_ts in tqdm(t_range):
 
     # robot initial state
     q0 = [robot_node.x[first_ts], robot_node.y[first_ts], robot_node.theta[first_ts], robot_node.v[first_ts], 0]
     q0[4] = find_best_s(q0, path_obj, enable_global_search=True)
 
-    # MPC parameters, constraints and settings
-    control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
-    dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
-    vals_obj = MPCValues(path_obj, num_modes=num_modes, horizon=25,
-                         consensus_horizon=4, initial_state=q0, num_obstacles=len(non_robot_nodes))
+    vals_obj = MPCValues(path_obj, initial_state=q0,
+                         num_modes=num_modes, horizon=13,
+                         consensus_horizon=4, num_obstacles=len(non_robot_nodes), timestep=scene.dt)
 
     # make first predictions for obstacle constraints
     init_node_obstacles(non_robot_node_ids, vals_obj)
@@ -140,8 +144,8 @@ for first_ts in tqdm(t_range):
 
 " ==== Visualize Results ==== "
 # Plot predicted timestep
-plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map, max_hl=max_hl, ph=ph, x_min=scene.x_min,
-                                      y_min=scene.y_min, line_width=0.5, car_img_zoom=0.02,
-                                      robot_plan=robot_state_collection, scene_num=scene_num,
-                                      plot_range=[x_min, x_max, y_min, y_max])
+plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
+                                      max_hl=max_hl, ph=ph, x_min=scene.x_min,
+                                      y_min=scene.y_min,
+                                      robot_plan=robot_state_collection, scene_num=scene_num)
 
