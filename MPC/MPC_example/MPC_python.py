@@ -3,7 +3,7 @@ import os
 import time
 import matplotlib.pyplot as plt
 
-sys.path.append("../../mats_modules")
+sys.path.append("../../mats")
 from utils import prediction_output_to_trajectories
 from tqdm import tqdm, trange
 from nuscenes.nuscenes import NuScenes
