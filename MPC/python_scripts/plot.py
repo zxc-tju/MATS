@@ -395,29 +395,35 @@ def plot_vehicle_dist(ax, predictions, scene,
     ax.add_artist(veh_box)
 
 
-def plot_multi_frame_dist(fig, ax, mats_outputs_collection, scene,
+def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
+                          nusc_map=None,
                           max_hl=10, ph=6,
                           nuscenes_map=None, x_min=0, y_min=0,
                           line_alpha=0.8,
                           line_width=0.2, edge_width=2,
                           circle_edge_width=0.5, node_circle_size=0.3,
                           car_img_zoom=0.01, pi_threshold=0.05,
-                          robot_plan=None, scene_num=None):
+                          robot_plan=None, scene_num=None, plot_range=None):
     for t in range(len(mats_outputs_collection)):
-        predictions = mats_outputs_collection[t][0]
-        prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(predictions,
+        fig, ax = nusc_map.render_map_patch(patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
+
+        if nuscenes_map is not None:
+            ax.imshow(nuscenes_map.fdata, origin='lower', alpha=0.5)
+
+        prediction_distributions = mats_outputs_collection[t][0]
+        prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(prediction_distributions,
                                                                                           max_hl,
                                                                                           ph,
                                                                                           map=nuscenes_map)
 
-        ts_key = 1
+        assert (len(prediction_dict.keys()) <= 1)
+        if len(prediction_dict.keys()) == 0:
+            print("t", t)
+        ts_key = list(prediction_dict.keys())[0]
 
         prediction_dict = prediction_dict[ts_key]
         histories_dict = histories_dict[ts_key]
         futures_dict = futures_dict[ts_key]
-
-        if nuscenes_map is not None:
-            ax.imshow(nuscenes_map.fdata, origin='lower', alpha=0.5)
 
         cmap = ['k', 'b', 'y', 'g', 'r']
         i = 0
@@ -441,8 +447,6 @@ def plot_multi_frame_dist(fig, ax, mats_outputs_collection, scene,
                     pi = pis[mode_idx].item()
                     if pi < pi_threshold:
                         continue
-
-                    # plot_GMM(means, )
 
                     means = predictions.component_distribution.mean[:, 0, mode_idx, :2] + np.array([x_min, y_min])
                     covs = predictions.component_distribution.covariance_matrix[:, 0, mode_idx, :2, :2]
@@ -480,7 +484,7 @@ def plot_multi_frame_dist(fig, ax, mats_outputs_collection, scene,
                 veh_box.zorder = 700
                 ax.add_artist(veh_box)
                 i += 1
-            else:
+            elif node.type.name in {'PEDESTRIAN'}:
                 for mode_idx in range(predictions.mixture_distribution.param_shape[-1]):
                     pi = pis[mode_idx].item()
                     if pi < pi_threshold:
@@ -567,7 +571,9 @@ def plot_multi_frame_dist(fig, ax, mats_outputs_collection, scene,
         veh_box.zorder = 700
         ax.add_artist(veh_box)
 
+        # x_min, x_max, y_min, y_max = plot_range
         # ax.set_ylim(y_min, y_max)
         # ax.set_xlim(x_min, x_max)
         # plt.show()
         fig.savefig('plots/scene_' + str(scene_num) + '_t_' + str(t) + '.png', dpi=300, bbox_inches='tight')
+

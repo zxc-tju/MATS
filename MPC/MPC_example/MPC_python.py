@@ -3,8 +3,8 @@ import os
 import time
 import matplotlib.pyplot as plt
 
-# sys.path.append("../../mats")
-from mats.utils import prediction_output_to_trajectories
+sys.path.append("../../mats_modules")
+from utils import prediction_output_to_trajectories
 from tqdm import tqdm, trange
 from nuscenes.nuscenes import NuScenes
 from nuscenes.prediction import PredictHelper
@@ -45,8 +45,8 @@ if env.robot_type is None and hyperparams['incl_robot_node']:
 scenes = env.scenes
 
 # Data for plots
-# nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
-nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
+nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
+# nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
 layers = ['drivable_area',
           'road_segment',
           'lane',
@@ -85,10 +85,10 @@ robot_node, non_robot_nodes, non_robot_node_ids = get_scene_info(env, scene_num)
 # Configure figure center
 x_center = robot_node.x[t_range[0]]
 y_center = robot_node.y[t_range[0]]
-x_min = scene.x_min + x_center - 100.0
-y_min = scene.y_min + y_center - 50.0
-x_max = scene.x_min + x_center + 100.0
-y_max = scene.y_min + y_center + 100.0
+x_min = x_center - 75.0
+y_min = y_center - 75.0
+x_max = x_center + 75.0
+y_max = y_center + 75.0
 
 my_patch = (x_min, y_min, x_max, y_max)
 
@@ -137,17 +137,11 @@ for first_ts in tqdm(t_range):
 
     robot_state_collection.append(state_star)
 
+
 " ==== Visualize Results ==== "
-# pred_dists = mats_outputs_collection[0][0]
-
-fig, ax = nusc_map.render_map_patch(my_patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
-
 # Plot predicted timestep
-plotting_helper.plot_multi_frame_dist(fig, ax, mats_outputs_collection, scene, max_hl=max_hl, ph=ph, x_min=scene.x_min,
+plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map, max_hl=max_hl, ph=ph, x_min=scene.x_min,
                                       y_min=scene.y_min, line_width=0.5, car_img_zoom=0.02,
-                                      robot_plan=robot_state_collection, scene_num=scene_num)
+                                      robot_plan=robot_state_collection, scene_num=scene_num,
+                                      plot_range=[x_min, x_max, y_min, y_max])
 
-ax.set_ylim(y_min, y_max)
-ax.set_xlim(x_min, x_max)
-# plt.show()
-fig.savefig('plots/scene_' + str(scene_num) + '_t_' + str(first_ts) + '.png', dpi=300, bbox_inches='tight')

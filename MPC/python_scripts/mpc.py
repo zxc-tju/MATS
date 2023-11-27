@@ -299,7 +299,7 @@ class MPCProblem:
     def solve(self):
         # Solve the optimization problem here
         p_opts = {"expand": True}
-        s_opts = {"max_iter": 1000, "print_level": 3}
+        s_opts = {"max_iter": 1000, "print_level": 0}
         self.model.solver('ipopt', p_opts, s_opts)
         try:
             # Attempt to solve the optimization problem
