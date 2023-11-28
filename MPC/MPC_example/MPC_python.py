@@ -2,19 +2,22 @@ import sys
 import os
 import time
 import matplotlib.pyplot as plt
-
-sys.path.append("../../mats")
-from utils import prediction_output_to_trajectories
 from tqdm import tqdm, trange
 from nuscenes.nuscenes import NuScenes
 from nuscenes.prediction import PredictHelper
 from nuscenes.map_expansion.map_api import NuScenesMap
 
-from MPC.python_scripts.utils import *
-from MPC.python_scripts.structs import *
-from MPC.python_scripts.path_handling import *
-from MPC.python_scripts.mpc import *
+from MPC.python_scripts.utils import (load_model, load_data_set, predicted_dynamics, get_recorded_robot_controls,
+                                      update_obstacles_from_predictions, predict_future_states)
+from MPC.python_scripts.structs import (get_scene_info, ControlLimits, DynamicsModel,
+                                        PredictionSettings, init_node_obstacles)
+from MPC.python_scripts.path_handling import load_splines, SplinePath, find_best_s
+from MPC.python_scripts.mpc import MPCProblem, MPCValues, initial_guess
 import MPC.python_scripts.plot as plotting_helper
+
+sys.path.append("../../mats")
+from utils import prediction_output_to_trajectories
+
 
 " ==== Prepare model and data ==== "
 # load data
@@ -106,6 +109,8 @@ control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
 dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
 
 " ==== MPC process ==== "
+
+" --- Initialize MPC --- "
 for first_ts in tqdm(t_range):
 
     # robot initial state

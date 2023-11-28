@@ -18,7 +18,7 @@ from nuscenes.map_expansion.map_api import NuScenesMap
 from nuscenes.eval.prediction.splits import get_prediction_challenge_split
 from environment import Environment, Scene, Node, GeometricMap, derivative_of
 
-FREQUENCY = 10
+FREQUENCY = 2
 dt = 1 / FREQUENCY
 data_columns_vehicle = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration', 'heading'], ['x', 'y']])
 data_columns_vehicle = data_columns_vehicle.append(pd.MultiIndex.from_tuples([('heading', '°'), ('heading', 'd°')]))
@@ -520,7 +520,7 @@ def process_data(data_path, version, output_path, half_dt, dynamic):
         dynamic_str = '_dynamic' if dynamic else ''
 
         if len(scenes) > 0:
-            data_dict_path = os.path.join(output_path, f'nuScenes_{data_class}_full{doubled_str}{dynamic_str}_dt_{dt}.pkl')
+            data_dict_path = os.path.join(output_path, f'nuScenes_{data_class}_full{doubled_str}{dynamic_str}.pkl')
             with open(data_dict_path, 'wb') as f:
                 dill.dump(env, f, protocol=dill.HIGHEST_PROTOCOL)
             print('Saved Environment!')
