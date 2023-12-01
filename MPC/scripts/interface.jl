@@ -123,10 +123,11 @@ function predicted_dynamics(pred_settings, scene_num, timestep)
     end
 
     #TODO: hard coded indices
-    q_robot = [env.scenes[scene_num].robot.data.data[timestep, 1], # x
-               env.scenes[scene_num].robot.data.data[timestep, 2], # y
-               env.scenes[scene_num].robot.data.data[timestep, 9], # heading
-               env.scenes[scene_num].robot.data.data[timestep, 11]] # v
+    #20231201 ZXC add "pred_settings." 
+    q_robot = [pred_settings.env.scenes[scene_num].robot.data.data[timestep, 1], # x
+               pred_settings.env.scenes[scene_num].robot.data.data[timestep, 2], # y
+               pred_settings.env.scenes[scene_num].robot.data.data[timestep, 9], # heading
+               pred_settings.env.scenes[scene_num].robot.data.data[timestep, 11]] # v
     q0[1:4] = q_robot
 
     Aps, Bps, gps, q0, ordered_node_ids
