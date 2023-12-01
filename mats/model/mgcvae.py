@@ -439,7 +439,7 @@ class ASubmodel(object):
 
         :param mode: Mode in which the model is operated. E.g. Train, Eval, Predict.
         :param node_present: Current state of the node. [bs, state]
-        :param node_future: Future states of the node. [bs, ph, state]
+        :param node_future: Future states of the node. [bs, prediction_horizon, state]
         :return: Encoded future.
         """
         initial_h_model = self.node_modules[self.dest_type + '/node_future_encoder/initial_h']
@@ -469,7 +469,7 @@ class ASubmodel(object):
 
         :param mode: Mode in which the model is operated. E.g. Train, Eval, Predict.
         :param robot_present: Current state of the robot. [bs, state]
-        :param robot_future: Future states of the robot. [bs, ph, state]
+        :param robot_future: Future states of the robot. [bs, prediction_horizon, state]
         :return: Encoded future.
         """
         initial_h_model = self.node_modules[self.dest_type + '/robot_future_encoder/initial_h']
@@ -566,7 +566,7 @@ class ASubmodel(object):
 
         A_submatrices = []
 
-        # log_pis is [bs, ph, num_samples, num_components]
+        # log_pis is [bs, prediction_horizon, num_samples, num_components]
         p_log_pis = self.latent.p_dist.logits.unsqueeze(1).repeat(num_samples, ph, 1, 1)
         q_log_pis = None
         if mode != ModeKeys.PREDICT:
@@ -596,7 +596,7 @@ class ASubmodel(object):
             input_ = torch.cat(dec_inputs, dim=1)
             state = h_state
 
-        # A_submatrices is [num_samples, num_components, bs, ph, dest_pred_state_length, orig_pred_state_length]
+        # A_submatrices is [num_samples, num_components, bs, prediction_horizon, dest_pred_state_length, orig_pred_state_length]
         A_submatrices = torch.stack(A_submatrices, dim=1)
         A_submatrices = torch.reshape(A_submatrices,
                                       [num_samples, num_components,
@@ -604,8 +604,8 @@ class ASubmodel(object):
                                        self.dest_pred_state_length,
                                        self.orig_pred_state_length]).permute(2, 3, 0, 1, 4, 5)
 
-        # log_pis is now [bs, ph, num_samples, num_components]
-        # A_submatrices is now [bs, ph, num_samples, num_components, dest_pred_state_length, orig_pred_state_length]
+        # log_pis is now [bs, prediction_horizon, num_samples, num_components]
+        # A_submatrices is now [bs, prediction_horizon, num_samples, num_components, dest_pred_state_length, orig_pred_state_length]
         return p_log_pis, q_log_pis, A_submatrices
 
     def encoder(self, mode, x, y_e, num_samples=None):
@@ -847,7 +847,7 @@ class BQSubmodel(ASubmodel):
 
         B_submatrices, logQ_submatrices = [], []
 
-        # log_pis is [bs, ph, num_samples, num_components]
+        # log_pis is [bs, prediction_horizon, num_samples, num_components]
         p_log_pis = self.latent.p_dist.logits.unsqueeze(1).repeat(num_samples, ph, 1, 1)
         q_log_pis = None
         if mode != ModeKeys.PREDICT:
@@ -884,7 +884,7 @@ class BQSubmodel(ASubmodel):
             input_ = torch.cat(dec_inputs, dim=1)
             state = h_state
 
-        # B_submatrices is [num_samples, num_components, bs, ph, dest_pred_state_length, 2]
+        # B_submatrices is [num_samples, num_components, bs, prediction_horizon, dest_pred_state_length, 2]
         B_submatrices = torch.stack(B_submatrices, dim=1)
         B_submatrices = torch.reshape(B_submatrices,
                                       [num_samples, num_components,
@@ -892,16 +892,16 @@ class BQSubmodel(ASubmodel):
                                        self.dest_pred_state_length,
                                        2]).permute(2, 3, 0, 1, 4, 5)
 
-        # logQ_submatrices is [num_samples, num_components, bs, ph, dest_pred_state_length]
+        # logQ_submatrices is [num_samples, num_components, bs, prediction_horizon, dest_pred_state_length]
         logQ_submatrices = torch.stack(logQ_submatrices, dim=1)
         logQ_submatrices = torch.reshape(logQ_submatrices,
                                          [num_samples, num_components,
                                           -1, ph,
                                           self.dest_pred_state_length]).permute(2, 3, 0, 1, 4)
 
-        # log_pis is now [bs, ph, num_samples, num_components]
-        # B_submatrices is now [bs, ph, num_samples, num_components, dest_pred_state_length, 2]
-        # logQ_submatrices is now [bs, ph, num_samples, num_components, dest_pred_state_length]
+        # log_pis is now [bs, prediction_horizon, num_samples, num_components]
+        # B_submatrices is now [bs, prediction_horizon, num_samples, num_components, dest_pred_state_length, 2]
+        # logQ_submatrices is now [bs, prediction_horizon, num_samples, num_components, dest_pred_state_length]
         return p_log_pis, q_log_pis, B_submatrices, logQ_submatrices
 
     def decoder(self, mode, x, x_nr_t, y, y_r, n_s_t0, z, prediction_horizon, num_samples):

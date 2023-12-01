@@ -5,6 +5,15 @@ class PredictionSettings:
         self.env = env
         self.num_modes = num_modes
 
+    def update(self, scene_num=None, ts=None, pred_horizon=None, qs=None, us=None):
+
+        self.env.scenes[scene_num].robot.data.data[ts:ts + pred_horizon + 1, 0] = qs[0, :pred_horizon + 1]  # x
+        self.env.scenes[scene_num].robot.data.data[ts:ts + pred_horizon + 1, 1] = qs[1, :pred_horizon + 1]  # y
+        self.env.scenes[scene_num].robot.data.data[ts:ts + pred_horizon + 1, 8] = qs[2, :pred_horizon + 1]  # θ
+        self.env.scenes[scene_num].robot.data.data[ts:ts + pred_horizon, 9] = us[0, :pred_horizon]  # ω
+        self.env.scenes[scene_num].robot.data.data[ts:ts + pred_horizon + 1, 10] = qs[3, :pred_horizon + 1]  # v
+        self.env.scenes[scene_num].robot.data.data[ts:ts + pred_horizon, 11] = us[1, :pred_horizon]  # a
+
 
 class Node:
     def __init__(self, x, y, theta, v, first_timestep, last_timestep, type_, id_):

@@ -21,7 +21,7 @@ from utils import prediction_output_to_trajectories
 
 " ==== Prepare model and data ==== "
 # load data
-env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full.pkl")
+env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full_doubled.pkl")
 
 # load model
 mats, hyperparams = load_model('../../experiments/nuScenes/models'
@@ -30,7 +30,7 @@ mats, hyperparams = load_model('../../experiments/nuScenes/models'
 
 mats.set_environment(env)
 mats.set_annealing_params()
-ph = hyperparams['prediction_horizon']
+prediction_horizon = hyperparams['prediction_horizon']
 max_hl = hyperparams['maximum_history_length']
 
 for attention_radius_override in hyperparams['override_attention_radius']:
@@ -68,7 +68,7 @@ if not os.path.isdir('./plots'):
 " ==== Prepare Data Recording ==== "
 mats_outputs_collection = []
 robot_state_collection = []
-t_range = range(2, 10)
+t_range = range(2, 14)
 
 " ==== Select Scene ==== "
 # select scene
@@ -107,50 +107,84 @@ path_obj = SplinePath(x_coefs_var, y_coefs_var, breaks_var)
 # MPC parameters, constraints and settings
 control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
 dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
+iteration_num = 1
 
 " ==== MPC process ==== "
 
 " --- Initialize MPC --- "
-for first_ts in tqdm(t_range):
+first_ts = t_range[0]
 
-    # robot initial state
-    q0 = [robot_node.x[first_ts], robot_node.y[first_ts], robot_node.theta[first_ts], robot_node.v[first_ts], 0]
-    q0[4] = find_best_s(q0, path_obj, enable_global_search=True)
+# robot initial state
+q0 = [robot_node.x[first_ts], robot_node.y[first_ts], robot_node.theta[first_ts], robot_node.v[first_ts], 0]
+q0[4] = find_best_s(q0, path_obj, enable_global_search=True)
 
-    vals_obj = MPCValues(path_obj, initial_state=q0,
+mpc_vals_obj = MPCValues(path_obj, initial_state=q0,
                          num_modes=num_modes, horizon=13,
                          consensus_horizon=4, num_obstacles=len(non_robot_nodes), timestep=scene.dt)
 
-    # make first predictions for obstacle constraints
-    init_node_obstacles(non_robot_node_ids, vals_obj)
-    Aps, Bps, gps, q_pred0, nodes_present, mats_outputs = predicted_dynamics(pred_settings, scene_num, first_ts)
-    u_pred = get_recorded_robot_controls(pred_settings, scene_num, first_ts)
-    q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in
-              range(0, vals_obj.num_modes)]
-    update_obstacles_from_predictions(q_pred, nodes_present, vals_obj, scene)
+# make first predictions for obstacle constraints
+init_node_obstacles(non_robot_node_ids, mpc_vals_obj)
+Aps, Bps, gps, q_pred0, nodes_present, mats_outputs = predicted_dynamics(pred_settings, q0[:4], scene_num, first_ts)
+u_pred = get_recorded_robot_controls(pred_settings, scene_num, first_ts)
+q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in
+          range(0, mpc_vals_obj.num_modes)]
 
+update_obstacles_from_predictions(q_pred, nodes_present, mpc_vals_obj, scene)
+
+# save prediction results
+mats_outputs_collection.append(mats_outputs)
+
+# initial solution guess
+initial_state_plan, initial_control_plan = initial_guess(mpc_vals_obj)
+
+# construct problem
+mpc = MPCProblem(dynamics_obj, mpc_vals_obj, non_robot_node_ids, initial_state_plan, initial_control_plan)
+
+# solve problem
+time_start = time.time()
+state_star, control_star = mpc.solve()  # state_star include current state
+robot_state_collection.append(state_star)
+print('output states', state_star[:, 0:3])
+print('time consumption: ', time.time() - time_start)
+
+
+" --- Solve MPC --- "
+for ts in tqdm(t_range[1:]):
+    # update initial solution for MPC
+    initial_state_plan = state_star
+    initial_control_plan = control_star
+
+    # update prediction on system dynamics in the new step ts
+    Aps, Bps, gps, q_pred0, nodes_present, mats_outputs = predicted_dynamics(pred_settings, initial_state_plan[:4, 1],
+                                                                             scene_num, ts)
     # save prediction results
     mats_outputs_collection.append(mats_outputs)
 
-    # initial solution guess
-    initial_state, initial_control = initial_guess(vals_obj)
+    # initialize prediction on obstacles (without map offset) in the new step
+    u_pred = initial_control_plan[0:2, 0:prediction_horizon]  # use control from optimization solution
+    u_pred = u_pred.T
+    q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in
+              range(0, mpc_vals_obj.num_modes)]
+    # align obstacles' positions with map offset
+    update_obstacles_from_predictions(q_pred, nodes_present, mpc_vals_obj, scene)
 
-    # construct problem
-    mpc = MPCProblem(dynamics_obj, vals_obj, non_robot_node_ids, initial_state, initial_control)
+    # TODO: update MPC problem
+    mpc_vals_obj.update_problem(initial_state_plan, initial_control_plan)
 
-    " ==== Solve MPC ==== "
-    time_start = time.time()
-    state_star, control_star = mpc.solve()
-    print('output states', state_star[:, 0:3])
-    print('time consumption: ', time.time() - time_start)
+    for i in range(iteration_num):  # TODO: iterate solution by updating prediction on obstacles
 
+        # reconstruct MPC
+        mpc = MPCProblem(dynamics_obj, mpc_vals_obj, non_robot_node_ids, initial_state_plan, initial_control_plan)
+
+        # solve MPC
+        state_star, control_star = mpc.solve()
     robot_state_collection.append(state_star)
 
 
 " ==== Visualize Results ==== "
 # Plot predicted timestep
 plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
-                                      max_hl=max_hl, ph=ph, x_min=scene.x_min,
+                                      max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
                                       y_min=scene.y_min,
                                       robot_plan=robot_state_collection, scene_num=scene_num)
 

@@ -121,7 +121,7 @@ max_hl = hyperparams['maximum_history_length']
 
 
 scene = scenes[5]  # np.random.choice(scenes)
-timestep = np.array([30])  # scene.sample_timesteps(1, min_future_timesteps=ph, min_history_length=max_hl)
+timestep = np.array([30])  # scene.sample_timesteps(1, min_future_timesteps=prediction_horizon, min_history_length=max_hl)
 
 # Get Prediction Results
 mats_outputs = list()
@@ -164,7 +164,7 @@ for idx in trange(len(mats_outputs)):
     #                                    pred_dists,
     #                                    scene.dt,
     #                                    max_hl=max_hl,
-    #                                    ph=ph,
+    #                                    prediction_horizon=prediction_horizon,
     #                                    map=None,
     #                                    robot_node=scene.robot,
     #                                    x_min=scene.x_min,

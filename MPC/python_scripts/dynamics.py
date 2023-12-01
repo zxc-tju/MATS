@@ -24,3 +24,7 @@ def discrete_dynamics(x, u, dt=0.02):
             x[2],
             x[3] + a * dt
         ])
+
+
+def simulate_path_dynamics(s, u, dt=0.02):
+    return u * dt + s

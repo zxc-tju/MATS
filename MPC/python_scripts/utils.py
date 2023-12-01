@@ -109,7 +109,7 @@ def predict(mats, hyperparams, scene, timestep, num_modes):
     return prediction_info, dynamics_dict, mats_outputs
 
 
-def predicted_dynamics(pred_settings, scene_num, timestep):
+def predicted_dynamics(pred_settings, robot_current_state, scene_num, timestep):
     # Call the predict function from python_utils module
     prediction_info, dynamics_dict, mats_outputs = predict(pred_settings.mats,
                                                            pred_settings.hyperparams,
@@ -141,12 +141,12 @@ def predicted_dynamics(pred_settings, scene_num, timestep):
         ordered_node_ids[node_idx - 1] = k.split("/")[1]
 
     # Populate robot state in q0
-    robot = pred_settings.env.scenes[scene_num].robot
-    q_robot = [robot.data.data[timestep, 0],  # x
-               robot.data.data[timestep, 1],  # y
-               robot.data.data[timestep, 8],  # heading
-               robot.data.data[timestep, 10]]  # v
-    q0[:state_dim] = q_robot
+    # robot = pred_settings.env.scenes[scene_num].robot
+    # q_robot = [robot.data.data[timestep, 0],  # x
+    #            robot.data.data[timestep, 1],  # y
+    #            robot.data.data[timestep, 8],  # heading
+    #            robot.data.data[timestep, 10]]  # v
+    q0[:state_dim] = robot_current_state
 
     return Aps, Bps, gps, q0, ordered_node_ids, mats_outputs
 
