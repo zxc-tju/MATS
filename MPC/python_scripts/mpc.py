@@ -76,9 +76,9 @@ class MPCValues:
         S_state = self.S_state
 
         # Update initial state and prev control
-        self.initial_state = initial_state_plan[:, 1]
+        self.initial_state = initial_state_plan[:, 1].copy()
         self.initial_state[4] = find_best_s(self.initial_state, path)
-        self.initial_control = initial_control_plan[:, 0]
+        self.initial_control = initial_control_plan[:, 0].copy()
 
         # Shift states and controls over consensus portion
         initial_state_plan[:, :consensus_horizon] = initial_state_plan[:, 1:consensus_horizon + 1]
@@ -160,7 +160,7 @@ class MPCValues:
         for k in range(S_state):
             self.robot_positions[k] = initial_state_plan[:2, k]
 
-        return initial_state_plan, initial_control_plan
+        # return initial_state_plan, initial_control_plan
 
 
 def initial_guess(vals, v0=None):
@@ -200,15 +200,15 @@ def initial_guess(vals, v0=None):
 
 
 class MPCProblem:
-    def __init__(self, dynamics, vals, non_robot_node_ids, q_initial, u_initial):
+    def __init__(self, dynamics, vals, non_robot_node_ids, initial_state_plan, initial_control_plan):
         self.dynamics = dynamics
         self.vals = vals
         self.non_robot_node_ids = non_robot_node_ids
         self.model = ca.Opti()
         self.q = self.model.variable(vals.state_dim, vals.S_state)
         self.u = self.model.variable(vals.control_dim, vals.S_control)
-        self.q_initial = q_initial  # [x, y, heading, v, s]
-        self.u_initial = u_initial
+        self.initial_state_plan = initial_state_plan  # [x, y, heading, v, s]
+        self.initial_control_plan = initial_control_plan
         self.construct_problem()
 
     def construct_problem(self):
@@ -263,12 +263,12 @@ class MPCProblem:
         As, Bs, gs = [], [], []
 
         for k in range(consensus_horizon - 1):
-            Ak, Bk = linearize_dynamics(discrete_dynamics, self.q_initial[0:state_dim - 1, k],
-                                        self.u_initial[0:control_dim - 1, k], dt)
+            Ak, Bk = linearize_dynamics(discrete_dynamics, self.initial_state_plan[0:state_dim - 1, k],
+                                        self.initial_control_plan[0:control_dim - 1, k], dt)
             self.vals.As[k] = Ak
             self.vals.Bs[k] = Bk
-            self.vals.gs[k] = discrete_dynamics(self.q_initial[0:state_dim - 1, k],
-                                                self.u_initial[0:control_dim - 1, k], dt) - Ak @ self.q_initial[
+            self.vals.gs[k] = discrete_dynamics(self.initial_state_plan[0:state_dim - 1, k],
+                                                self.initial_control_plan[0:control_dim - 1, k], dt) - Ak @ self.initial_state_plan[
                                                                                                  0:state_dim - 1, k]
 
             As.append(Ak)
@@ -282,15 +282,15 @@ class MPCProblem:
                 dt * self.u[control_dim - 1, k] + self.q[state_dim - 1, k] == self.q[state_dim - 1, k + 1])
 
         # Constraints for transitions from k_c to subsequent time step for each mode
-        Ak_c, Bk_c = linearize_dynamics(discrete_dynamics, self.q_initial[0:state_dim - 1, consensus_horizon - 1],
-                                        self.u_initial[0:control_dim - 1, consensus_horizon - 1], dt)
+        Ak_c, Bk_c = linearize_dynamics(discrete_dynamics, self.initial_state_plan[0:state_dim - 1, consensus_horizon - 1],
+                                        self.initial_control_plan[0:control_dim - 1, consensus_horizon - 1], dt)
         self.vals.As[consensus_horizon - 1] = Ak_c
         self.vals.Bs[consensus_horizon - 1] = Bk_c
-        self.vals.gs[consensus_horizon - 1] = discrete_dynamics(self.q_initial[0:state_dim - 1, consensus_horizon - 1],
-                                                                self.u_initial[0:control_dim - 1,
-                                                                consensus_horizon - 1], dt) - Ak_c @ self.q_initial[
+        self.vals.gs[consensus_horizon - 1] = discrete_dynamics(self.initial_state_plan[0:state_dim - 1, consensus_horizon - 1],
+                                                                self.initial_control_plan[0:control_dim - 1,
+                                                                consensus_horizon - 1], dt) - Ak_c @ self.initial_state_plan[
                                                                                                      0:state_dim - 1,
-                                                                                                     consensus_horizon - 1] - Bk_c @ self.u_initial[
+                                                                                                     consensus_horizon - 1] - Bk_c @ self.initial_control_plan[
                                                                                                                                      0:control_dim - 1,
                                                                                                                                      consensus_horizon - 1]
 
@@ -315,14 +315,14 @@ class MPCProblem:
             end_idx = start_idx + (horizon - consensus_horizon - 1)
 
             for k in range(start_idx, end_idx):
-                Ak, Bk = linearize_dynamics(discrete_dynamics, self.q_initial[0:state_dim - 1, k],
-                                            self.u_initial[0:control_dim - 1, k], dt)
+                Ak, Bk = linearize_dynamics(discrete_dynamics, self.initial_state_plan[0:state_dim - 1, k],
+                                            self.initial_control_plan[0:control_dim - 1, k], dt)
                 self.vals.As[k] = Ak
                 self.vals.Bs[k] = Bk
-                self.vals.gs[k] = discrete_dynamics(self.q_initial[0:state_dim - 1, k],
-                                                    self.u_initial[0:control_dim - 1, k], dt) - Ak @ self.q_initial[
+                self.vals.gs[k] = discrete_dynamics(self.initial_state_plan[0:state_dim - 1, k],
+                                                    self.initial_control_plan[0:control_dim - 1, k], dt) - Ak @ self.initial_state_plan[
                                                                                                      0:state_dim - 1,
-                                                                                                     k] - Bk @ self.u_initial[
+                                                                                                     k] - Bk @ self.initial_control_plan[
                                                                                                                0:control_dim - 1,
                                                                                                                k]
 
@@ -351,7 +351,7 @@ class MPCProblem:
 
         b = 3
         for t in range(S_q):
-            self.vals.robot_positions[t] = self.q_initial[0:2, t]
+            self.vals.robot_positions[t] = self.initial_state_plan[0:2, t]
             robot_position.append(self.vals.robot_positions[t])
 
         for j in range(n_modes):  # n_modes=1
@@ -377,7 +377,7 @@ class MPCProblem:
         cs = []
         Γs = []
         for k in range(S_q):
-            P0 = [self.q_initial[0, k], self.q_initial[1, k], self.q_initial[4, k]]  # X, Y, s of the initial guess
+            P0 = [self.initial_state_plan[0, k], self.initial_state_plan[1, k], self.initial_state_plan[4, k]]  # X, Y, s of the initial guess
             spline_idx = find_spline_interval(P0[2], self.vals.path)
             if k in end_horizon_idces(self.vals):
                 ck = tracking_linear_term(P0, self.vals.terminal_contouring, self.vals.lag_cost, self.vals.path,
@@ -428,7 +428,7 @@ class MPCProblem:
     def solve(self):
         # Solve the optimization problem here
         p_opts = {"expand": True}
-        s_opts = {"max_iter": 1000, "print_level": 0}
+        s_opts = {"max_iter": 1000, "print_level": 1}
         self.model.solver('ipopt', p_opts, s_opts)
         try:
             # Attempt to solve the optimization problem

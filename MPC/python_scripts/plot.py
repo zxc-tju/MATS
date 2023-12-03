@@ -516,7 +516,7 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                 'w-o',
                 linewidth=4,
                 markersize=3,
-                zorder=650,
+                zorder=750,
                 path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
 
         if robot_plan is not None:
@@ -527,7 +527,7 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                     'r--o',
                     linewidth=4,
                     markersize=3,
-                    zorder=650,
+                    zorder=750,
                     path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
 
         r_img = rotate(robot, scene.robot.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi,

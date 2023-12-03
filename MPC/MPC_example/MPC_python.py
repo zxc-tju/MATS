@@ -48,8 +48,8 @@ if env.robot_type is None and hyperparams['incl_robot_node']:
 scenes = env.scenes
 
 # Data for plots
-# nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
-nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
+nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
+# nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
 layers = ['drivable_area',
           'road_segment',
           'lane',
@@ -68,7 +68,7 @@ if not os.path.isdir('./plots'):
 " ==== Prepare Data Recording ==== "
 mats_outputs_collection = []
 robot_state_collection = []
-t_range = range(2, 14)
+t_range = range(2, 17)
 
 " ==== Select Scene ==== "
 # select scene
@@ -88,10 +88,10 @@ robot_node, non_robot_nodes, non_robot_node_ids = get_scene_info(env, scene_num)
 # Configure figure center
 x_center = robot_node.x[t_range[0]]
 y_center = robot_node.y[t_range[0]]
-x_min = x_center - 75.0
-y_min = y_center - 75.0
+x_min = x_center - 25.0
+y_min = y_center - 55.0
 x_max = x_center + 75.0
-y_max = y_center + 75.0
+y_max = y_center + 55.0
 
 my_patch = (x_min, y_min, x_max, y_max)
 
@@ -151,8 +151,8 @@ print('time consumption: ', time.time() - time_start)
 " --- Solve MPC --- "
 for ts in tqdm(t_range[1:]):
     # update initial solution for MPC
-    initial_state_plan = state_star
-    initial_control_plan = control_star
+    initial_state_plan = state_star.copy()
+    initial_control_plan = control_star.copy()
 
     # update prediction on system dynamics in the new step ts
     Aps, Bps, gps, q_pred0, nodes_present, mats_outputs = predicted_dynamics(pred_settings, initial_state_plan[:4, 1],
