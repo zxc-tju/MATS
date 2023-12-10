@@ -1,6 +1,8 @@
 import autograd.numpy as np
 from autograd import grad
-
+import numpy as nup
+import scipy.interpolate
+import matplotlib.pyplot as plt
 
 class SplinePath:
     def __init__(self, x_coefs, y_coefs, breaks):
@@ -117,3 +119,37 @@ def heading(s, path, spline_idx):
     # print('dx_ds:', dx_ds)
     # print('dy_ds:', dy_ds)
     return np.arctan2(dy_ds, dx_ds)
+
+
+def get_path_obj(x_list, y_list):
+    # trajectory points
+    x_points = np.array(x_list)
+    y_points = np.array(y_list)
+
+    # Calculate distances between consecutive points
+    distances = nup.sqrt(nup.diff(x_points) ** 2 + nup.diff(y_points) ** 2)
+    cumulative_arc_length = nup.insert(nup.cumsum(distances), 0, 0)
+
+    # Use cumulative arc length for parameterization
+    param = cumulative_arc_length
+
+    segment_length = 4  # Or another number > 3
+    segment_indices = nup.arange(0, len(x_points), segment_length)
+    # if segment_indices[-1] != len(x_points) - 1:
+    #     segment_indices = np.append(segment_indices, len(x_points) - 1)
+
+    num_segments = len(segment_indices) - 1
+    x_coefs = nup.zeros((num_segments, 4))
+    y_coefs = nup.zeros((num_segments, 4))
+
+    # Compute coefficients for each segment
+    for i in range(num_segments):
+        start_idx, end_idx = segment_indices[i], segment_indices[i + 1]
+        x_spline = scipy.interpolate.CubicSpline(param[start_idx:end_idx], x_points[start_idx:end_idx])
+        y_spline = scipy.interpolate.CubicSpline(param[start_idx:end_idx], y_points[start_idx:end_idx])
+        x_coefs[i, :] = x_spline.c[:, 0]
+        y_coefs[i, :] = y_spline.c[:, 0]
+
+    # Breaks are the parameter values at the start of each segment
+    breaks = param[segment_indices[:-1]]
+    return SplinePath(x_coefs, y_coefs, breaks)

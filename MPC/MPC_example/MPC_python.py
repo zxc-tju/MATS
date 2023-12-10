@@ -1,7 +1,6 @@
 import sys
 import os
 import time
-import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 from nuscenes.nuscenes import NuScenes
 from nuscenes.prediction import PredictHelper
@@ -11,7 +10,7 @@ from MPC.python_scripts.utils import (load_model, load_data_set, predicted_dynam
                                       update_obstacles_from_predictions, predict_future_states)
 from MPC.python_scripts.structs import (get_scene_info, ControlLimits, DynamicsModel,
                                         PredictionSettings, init_node_obstacles)
-from MPC.python_scripts.path_handling import load_splines, SplinePath, find_best_s
+from MPC.python_scripts.path_handling import load_splines, SplinePath, find_best_s, get_path_obj
 from MPC.python_scripts.mpc import MPCProblem, MPCValues, initial_guess
 import MPC.python_scripts.plot as plotting_helper
 
@@ -68,11 +67,11 @@ if not os.path.isdir('./plots'):
 " ==== Prepare Data Recording ==== "
 mats_outputs_collection = []
 robot_state_collection = []
-t_range = range(2, 17)
+t_range = range(2, 30)
 
 " ==== Select Scene ==== "
 # select scene
-scene_num = 23  # corresponds to 24 in julia indexing
+scene_num = 23  # original demo is 23
 scene = scenes[scene_num]
 scene.calculate_scene_graph(env.attention_radius,
                             hyperparams['edge_addition_filter'],
@@ -100,14 +99,18 @@ my_patch = (x_min, y_min, x_max, y_max)
 num_modes = 1
 pred_settings = PredictionSettings(mats, hyperparams, env, num_modes)
 
-# get path data
-x_coefs_var, y_coefs_var, breaks_var = load_splines()
-path_obj = SplinePath(x_coefs_var, y_coefs_var, breaks_var)
+# get path data from files
+# ----- archived old version used in julia ----- #
+# x_coefs_var, y_coefs_var, breaks_var = load_splines()
+# path_obj = SplinePath(x_coefs_var, y_coefs_var, breaks_var)
+# ----- new version generated from robot trajectory ----- #
+path_obj = get_path_obj(robot_node.x, robot_node.y)
+
 
 # MPC parameters, constraints and settings
 control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
 dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
-iteration_num = 3
+iteration_num = 1
 
 " ==== MPC process ==== "
 
