@@ -73,8 +73,6 @@ class MPCValues:
         terminal_contouring = self.terminal_contouring
         lag_cost = self.lag_cost
 
-        S_state = self.S_state
-
         # Update initial state and prev control
         self.initial_state = initial_state_plan[:, 1].copy()
         self.initial_state[4] = find_best_s(self.initial_state, path)
@@ -102,11 +100,11 @@ class MPCValues:
                                                                      horizon_start + 1:horizon_end - 1]
 
             # Simulate for new last state for each horizon
-            q_last_A = discrete_dynamics(initial_state_plan[:state_dim - 1, horizon_end],
-                                         initial_control_plan[:control_dim - 1, horizon_end - 1], timestep)
-            q_last_B = simulate_path_dynamics(initial_state_plan[-1, horizon_end],
+            q_last_xyvh = discrete_dynamics(initial_state_plan[:state_dim - 1, horizon_end],
+                                            initial_control_plan[:control_dim - 1, horizon_end - 1], timestep)
+            q_last_s = simulate_path_dynamics(initial_state_plan[-1, horizon_end],
                                               initial_control_plan[-1, horizon_end - 1])
-            q_last = np.concatenate([q_last_A, np.array([q_last_B])])
+            q_last = np.concatenate([q_last_xyvh, np.array([q_last_s])])
             initial_state_plan[:, horizon_end] = q_last
 
             # Shift dynamics matrices for each horizon
@@ -157,46 +155,53 @@ class MPCValues:
         self.linear_contouring_matrix = block_diag(*self.linear_contouring)
 
         # Update positions for obstacle constraints
-        for k in range(S_state):
+        for k in range(self.S_state):
             self.robot_positions[k] = initial_state_plan[:2, k]
 
         # return initial_state_plan, initial_control_plan
 
+    def re_linearize_dynamics(self, initial_state_plan, initial_control_plan):
+        dt = self.timestep
+        state_dim = self.state_dim
+        control_dim = self.control_dim
+        s_discrete = self.S_discrete
+        s_state = self.S_state
 
-def initial_guess(vals, v0=None):
-    """
-    Produces an initial trajectory for the first MPC iteration.
-    NOTE: Check heading and wrap to π potential issues.
-    """
-    path = vals.path
-    n_modes = vals.num_modes
-    N = vals.horizon
-    k_c = vals.consensus_horizon
-    dt = vals.timestep
+        # dynamic constraints
+        for k in range(s_discrete - 1):
+            Ak, Bk = linearize_dynamics(discrete_dynamics, initial_state_plan[0:state_dim - 1, k],
+                                        initial_control_plan[0:control_dim - 1, k], dt)
+            self.As[k] = Ak
+            self.Bs[k] = Bk
+            self.gs[k] = discrete_dynamics(initial_state_plan[0:state_dim - 1, k],
+                                           initial_control_plan[0:control_dim - 1, k],
+                                           dt) - Ak @ initial_state_plan[
+                                                      0:state_dim - 1, k]
 
-    if v0 is None:
-        v0 = vals.initial_state[3]
-    s0 = vals.initial_state[4]
+        # reproject to find arc length
+        for k in range(s_state):
+            initial_state_plan[4, k] = find_best_s(initial_state_plan[:, k], self.path)
 
-    s_guess = np.linspace(s0, s0 + v0 * dt * (N - 1), N)
-    spline_indices = [find_spline_interval(s, path) for s in s_guess]
-
-    X_guess = [spline_x(s, path, idx) for s, idx in zip(s_guess, spline_indices)]
-    Y_guess = [spline_y(s, path, idx) for s, idx in zip(s_guess, spline_indices)]
-    psi_guess = [heading(s, path, idx) for s, idx in zip(s_guess, spline_indices)]
-    v_guess = v0 * np.ones(N)
-
-    omega_guess = np.diff(psi_guess) / dt
-    a_guess = np.zeros(N - 1)
-    vs_guess = v0 * np.ones(N - 1)
-
-    qs = np.vstack([X_guess, Y_guess, psi_guess, v_guess, s_guess])
-    us = np.vstack([omega_guess, a_guess, vs_guess])
-
-    qs = np.hstack([qs, np.repeat(qs[:, k_c:], n_modes - 1, axis=1)])
-    us = np.hstack([us, np.repeat(us[:, k_c - 1:], n_modes - 1, axis=1)])
-
-    return qs, us
+        # contour/lag cost matrices
+        cs = []
+        Γs = []
+        for k in range(s_state):
+            P0 = [initial_state_plan[0, k], initial_state_plan[1, k],
+                  initial_state_plan[4, k]]  # X, Y, s of the initial guess
+            spline_idx = find_spline_interval(P0[2], self.path)
+            if k in end_horizon_idces(self):
+                ck = tracking_linear_term(P0, self.terminal_contouring, self.lag_cost, self.path,
+                                          spline_idx)
+                Γk = tracking_quadratic_term(P0, self.terminal_contouring, self.lag_cost, self.path,
+                                             spline_idx)
+            else:
+                ck = tracking_linear_term(P0, self.contouring_cost, self.lag_cost, self.path, spline_idx)
+                Γk = tracking_quadratic_term(P0, self.contouring_cost, self.lag_cost, self.path,
+                                             spline_idx)
+            cs.append(ck)
+            Γs.append(Γk)
+        self.contouring_state = np.concatenate(cs)
+        self.linear_contouring_matrix = block_diag(*Γs)
 
 
 class MPCProblem:
@@ -218,10 +223,6 @@ class MPCProblem:
         self.obstacle_constraints()
         self.tracking_cost_matrices()
         self.assemble_objective()
-
-    def update_problem(self, vals, q_initial, u_initial):
-
-        self.construct_problem()
 
     def state_constraints(self):
         self.model.subject_to(self.vals.initial_state == self.q[:, 0])
@@ -268,8 +269,9 @@ class MPCProblem:
             self.vals.As[k] = Ak
             self.vals.Bs[k] = Bk
             self.vals.gs[k] = discrete_dynamics(self.initial_state_plan[0:state_dim - 1, k],
-                                                self.initial_control_plan[0:control_dim - 1, k], dt) - Ak @ self.initial_state_plan[
-                                                                                                 0:state_dim - 1, k]
+                                                self.initial_control_plan[0:control_dim - 1, k],
+                                                dt) - Ak @ self.initial_state_plan[
+                                                           0:state_dim - 1, k]
 
             As.append(Ak)
             Bs.append(Bk)
@@ -282,17 +284,19 @@ class MPCProblem:
                 dt * self.u[control_dim - 1, k] + self.q[state_dim - 1, k] == self.q[state_dim - 1, k + 1])
 
         # Constraints for transitions from k_c to subsequent time step for each mode
-        Ak_c, Bk_c = linearize_dynamics(discrete_dynamics, self.initial_state_plan[0:state_dim - 1, consensus_horizon - 1],
+        Ak_c, Bk_c = linearize_dynamics(discrete_dynamics,
+                                        self.initial_state_plan[0:state_dim - 1, consensus_horizon - 1],
                                         self.initial_control_plan[0:control_dim - 1, consensus_horizon - 1], dt)
         self.vals.As[consensus_horizon - 1] = Ak_c
         self.vals.Bs[consensus_horizon - 1] = Bk_c
-        self.vals.gs[consensus_horizon - 1] = discrete_dynamics(self.initial_state_plan[0:state_dim - 1, consensus_horizon - 1],
-                                                                self.initial_control_plan[0:control_dim - 1,
-                                                                consensus_horizon - 1], dt) - Ak_c @ self.initial_state_plan[
-                                                                                                     0:state_dim - 1,
-                                                                                                     consensus_horizon - 1] - Bk_c @ self.initial_control_plan[
-                                                                                                                                     0:control_dim - 1,
-                                                                                                                                     consensus_horizon - 1]
+        self.vals.gs[consensus_horizon - 1] = discrete_dynamics(
+            self.initial_state_plan[0:state_dim - 1, consensus_horizon - 1],
+            self.initial_control_plan[0:control_dim - 1,
+            consensus_horizon - 1], dt) - Ak_c @ self.initial_state_plan[
+                                                 0:state_dim - 1,
+                                                 consensus_horizon - 1] - Bk_c @ self.initial_control_plan[
+                                                                                 0:control_dim - 1,
+                                                                                 consensus_horizon - 1]
 
         As.append(Ak_c)
         Bs.append(Bk_c)
@@ -320,11 +324,12 @@ class MPCProblem:
                 self.vals.As[k] = Ak
                 self.vals.Bs[k] = Bk
                 self.vals.gs[k] = discrete_dynamics(self.initial_state_plan[0:state_dim - 1, k],
-                                                    self.initial_control_plan[0:control_dim - 1, k], dt) - Ak @ self.initial_state_plan[
-                                                                                                     0:state_dim - 1,
-                                                                                                     k] - Bk @ self.initial_control_plan[
-                                                                                                               0:control_dim - 1,
-                                                                                                               k]
+                                                    self.initial_control_plan[0:control_dim - 1, k],
+                                                    dt) - Ak @ self.initial_state_plan[
+                                                               0:state_dim - 1,
+                                                               k] - Bk @ self.initial_control_plan[
+                                                                         0:control_dim - 1,
+                                                                         k]
 
                 As.append(Ak)
                 Bs.append(Bk)
@@ -377,7 +382,8 @@ class MPCProblem:
         cs = []
         Γs = []
         for k in range(S_q):
-            P0 = [self.initial_state_plan[0, k], self.initial_state_plan[1, k], self.initial_state_plan[4, k]]  # X, Y, s of the initial guess
+            P0 = [self.initial_state_plan[0, k], self.initial_state_plan[1, k],
+                  self.initial_state_plan[4, k]]  # X, Y, s of the initial guess
             spline_idx = find_spline_interval(P0[2], self.vals.path)
             if k in end_horizon_idces(self.vals):
                 ck = tracking_linear_term(P0, self.vals.terminal_contouring, self.vals.lag_cost, self.vals.path,
@@ -428,7 +434,7 @@ class MPCProblem:
     def solve(self):
         # Solve the optimization problem here
         p_opts = {"expand": True}
-        s_opts = {"max_iter": 1000, "print_level": 1}
+        s_opts = {"max_iter": 1000, "print_level": 0}
         self.model.solver('ipopt', p_opts, s_opts)
         try:
             # Attempt to solve the optimization problem
@@ -454,3 +460,39 @@ class MPCProblem:
                 print(f"Constraint {i}: {con} value at current iterate: {con_value}")
 
             return None, None
+
+
+def initial_guess(vals, v0=None):
+    """
+    Produces an initial trajectory for the first MPC iteration.
+    NOTE: Check heading and wrap to π potential issues.
+    """
+    path = vals.path
+    n_modes = vals.num_modes
+    N = vals.horizon
+    k_c = vals.consensus_horizon
+    dt = vals.timestep
+
+    if v0 is None:
+        v0 = vals.initial_state[3]
+    s0 = vals.initial_state[4]
+
+    s_guess = np.linspace(s0, s0 + v0 * dt * (N - 1), N)
+    spline_indices = [find_spline_interval(s, path) for s in s_guess]
+
+    X_guess = [spline_x(s, path, idx) for s, idx in zip(s_guess, spline_indices)]
+    Y_guess = [spline_y(s, path, idx) for s, idx in zip(s_guess, spline_indices)]
+    psi_guess = [heading(s, path, idx) for s, idx in zip(s_guess, spline_indices)]
+    v_guess = v0 * np.ones(N)
+
+    omega_guess = np.diff(psi_guess) / dt
+    a_guess = np.zeros(N - 1)
+    vs_guess = v0 * np.ones(N - 1)
+
+    qs = np.vstack([X_guess, Y_guess, psi_guess, v_guess, s_guess])
+    us = np.vstack([omega_guess, a_guess, vs_guess])
+
+    qs = np.hstack([qs, np.repeat(qs[:, k_c:], n_modes - 1, axis=1)])
+    us = np.hstack([us, np.repeat(us[:, k_c - 1:], n_modes - 1, axis=1)])
+
+    return qs, us

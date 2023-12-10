@@ -107,13 +107,13 @@ path_obj = SplinePath(x_coefs_var, y_coefs_var, breaks_var)
 # MPC parameters, constraints and settings
 control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
 dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
-iteration_num = 1
+iteration_num = 3
 
 " ==== MPC process ==== "
 
 " --- Initialize MPC --- "
 first_ts = t_range[0]
-
+state_star = []
 # robot initial state
 q0 = [robot_node.x[first_ts], robot_node.y[first_ts], robot_node.theta[first_ts], robot_node.v[first_ts], 0]
 q0[4] = find_best_s(q0, path_obj, enable_global_search=True)
@@ -137,22 +137,39 @@ mats_outputs_collection.append(mats_outputs)
 # initial solution guess
 initial_state_plan, initial_control_plan = initial_guess(mpc_vals_obj)
 
-# construct problem
-mpc = MPCProblem(dynamics_obj, mpc_vals_obj, non_robot_node_ids, initial_state_plan, initial_control_plan)
-
-# solve problem
-time_start = time.time()
-state_star, control_star = mpc.solve()  # state_star include current state
-robot_state_collection.append(state_star)
-print('output states', state_star[:, 0:3])
-print('time consumption: ', time.time() - time_start)
-
-
 " --- Solve MPC --- "
 for ts in tqdm(t_range[1:]):
-    # update initial solution for MPC
-    initial_state_plan = state_star.copy()
-    initial_control_plan = control_star.copy()
+
+    for i in range(iteration_num):
+        time_start = time.time()
+
+        # construct MPC
+        mpc = MPCProblem(dynamics_obj, mpc_vals_obj, non_robot_node_ids, initial_state_plan, initial_control_plan)
+
+        # solve problem
+        state_star, control_star = mpc.solve()  # state_star include current state
+        print(f'=====Results of {i} Iteration=====')
+        print('output states', state_star[-1, 0:3])
+
+        # update initial solution for MPC
+        initial_state_plan = state_star.copy()
+        initial_control_plan = control_star.copy()
+
+        # update self dynamics with new plan
+        mpc_vals_obj.re_linearize_dynamics(initial_state_plan, initial_control_plan)
+
+        # update prediction on obstacles (without map offset)
+        u_pred = initial_control_plan[0:2, 0:prediction_horizon]  # use control from optimization solution
+        u_pred = u_pred.T
+        q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in
+                  range(0, mpc_vals_obj.num_modes)]
+        # align obstacles' positions with map offset
+        update_obstacles_from_predictions(q_pred, nodes_present, mpc_vals_obj, scene)
+
+        print('time consumption: ', time.time() - time_start)
+
+    # save plan
+    robot_state_collection.append(state_star.copy())
 
     # update prediction on system dynamics in the new step ts
     Aps, Bps, gps, q_pred0, nodes_present, mats_outputs = predicted_dynamics(pred_settings, initial_state_plan[:4, 1],
@@ -160,7 +177,7 @@ for ts in tqdm(t_range[1:]):
     # save prediction results
     mats_outputs_collection.append(mats_outputs)
 
-    # initialize prediction on obstacles (without map offset) in the new step
+    # prediction on obstacles (without map offset)
     u_pred = initial_control_plan[0:2, 0:prediction_horizon]  # use control from optimization solution
     u_pred = u_pred.T
     q_pred = [predict_future_states(pred_settings, q_pred0, u_pred, Aps, Bps, gps, j) for j in
@@ -168,17 +185,8 @@ for ts in tqdm(t_range[1:]):
     # align obstacles' positions with map offset
     update_obstacles_from_predictions(q_pred, nodes_present, mpc_vals_obj, scene)
 
-    # TODO: update MPC problem
+    # shift [states, controls, dynamics] to the next time step
     mpc_vals_obj.update_problem(initial_state_plan, initial_control_plan)
-
-    for i in range(iteration_num):  # TODO: iterate solution by updating prediction on obstacles
-
-        # reconstruct MPC
-        mpc = MPCProblem(dynamics_obj, mpc_vals_obj, non_robot_node_ids, initial_state_plan, initial_control_plan)
-
-        # solve MPC
-        state_star, control_star = mpc.solve()
-    robot_state_collection.append(state_star)
 
 
 " ==== Visualize Results ==== "
