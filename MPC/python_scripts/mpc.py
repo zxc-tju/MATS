@@ -205,7 +205,7 @@ class MPCValues:
 
 
 class MPCProblem:
-    def __init__(self, dynamics, vals, non_robot_node_ids, initial_state_plan, initial_control_plan):
+    def __init__(self, dynamics, vals, non_robot_node_ids, initial_state_plan, initial_control_plan, planner=None):
         self.dynamics = dynamics
         self.vals = vals
         self.non_robot_node_ids = non_robot_node_ids
@@ -215,6 +215,7 @@ class MPCProblem:
         self.initial_state_plan = initial_state_plan  # [x, y, heading, v, s]
         self.initial_control_plan = initial_control_plan
         self.construct_problem()
+        self.planner_type = planner
 
     def construct_problem(self):
         self.state_constraints()
@@ -359,21 +360,40 @@ class MPCProblem:
             self.vals.robot_positions[t] = self.initial_state_plan[0:2, t]
             robot_position.append(self.vals.robot_positions[t])
 
-        for j in range(n_modes):  # n_modes=1
-            for t in range(max(consensus_horizon, obstacle_horizon)):
-                for i, node_id in enumerate(node_ids):
-                    if t < consensus_horizon:
-                        t_offset = t
-                        obstacle_position.append(self.vals.obstacles[node_id].positions[j][t])
-                    else:
-                        idx_offset = j * (horizon - consensus_horizon)  # idx_offset is always zero if n_modes=1
-                        t_offset = t + idx_offset
-                        obstacle_position.append(self.vals.obstacles[node_id].positions[j][t])
-                    if obs_on[i]:
-                        a = (robot_position[t_offset] - obstacle_position[-1]) / np.linalg.norm(
-                            robot_position[t_offset] - obstacle_position[-1])
+        # --- for only consider the most closed obstacle --- #
+        if self.planner_type == 'Single-Obstacle':
+            for j in range(n_modes):  # n_modes=1
+                for t in range(max(consensus_horizon, obstacle_horizon)):
+                    min_distance = 999
+                    i_min = 0
+                    for i, node_id in enumerate(node_ids):
+
+                        obstacle_position = self.vals.obstacles[node_id].positions[j][t]
+                        distance = np.linalg.norm(obstacle_position-robot_position[t])
+                        if distance < min_distance:
+                            min_distance = distance
+                            i_min = i
+                    if obs_on[i_min]:
+                        a = (robot_position[t] - obstacle_position) / np.linalg.norm(
+                            robot_position[t] - obstacle_position)
                         a_mx = MX(a).T  # Convert 'a' from NumPy to MX type
-                        self.model.subject_to(a_mx @ (self.q[0:2, t_offset] - obstacle_position[-1]) >= b)
+                        self.model.subject_to(a_mx @ (self.q[0:2, t] - obstacle_position) >= b)
+        else:
+            for j in range(n_modes):  # n_modes=1
+                for t in range(max(consensus_horizon, obstacle_horizon)):
+                    for i, node_id in enumerate(node_ids):
+                        if t < consensus_horizon:
+                            t_offset = t
+                            obstacle_position.append(self.vals.obstacles[node_id].positions[j][t])
+                        else:
+                            idx_offset = j * (horizon - consensus_horizon)  # idx_offset is always zero if n_modes=1
+                            t_offset = t + idx_offset
+                            obstacle_position.append(self.vals.obstacles[node_id].positions[j][t])
+                        if obs_on[i]:
+                            a = (robot_position[t_offset] - obstacle_position[-1]) / np.linalg.norm(
+                                robot_position[t_offset] - obstacle_position[-1])
+                            a_mx = MX(a).T  # Convert 'a' from NumPy to MX type
+                            self.model.subject_to(a_mx @ (self.q[0:2, t_offset] - obstacle_position[-1]) >= b)
 
         # return ps, obstacle_position, obs_on
 

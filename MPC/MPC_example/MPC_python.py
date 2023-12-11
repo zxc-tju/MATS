@@ -11,6 +11,8 @@ from nuscenes.nuscenes import NuScenes
 from nuscenes.prediction import PredictHelper
 from nuscenes.map_expansion.map_api import NuScenesMap
 
+sys.path.append("../../mats")
+sys.path.append("../../")
 from MPC.python_scripts.utils import (load_model, load_data_set, predicted_dynamics, get_recorded_robot_controls,
                                       update_obstacles_from_predictions, predict_future_states)
 from MPC.python_scripts.structs import (get_scene_info, ControlLimits, DynamicsModel,
@@ -19,12 +21,11 @@ from MPC.python_scripts.path_handling import load_splines, SplinePath, find_best
 from MPC.python_scripts.mpc import MPCProblem, MPCValues, initial_guess
 import MPC.python_scripts.plot as plotting_helper
 
-sys.path.append("../../mats")
 from utils import prediction_output_to_trajectories
 
 " ==== Prepare model and data ==== "
 # Load processed data
-env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full_doubled.pkl")
+env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_train_val_full_doubled.pkl")
 
 # Raw data for plots
 # nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
@@ -61,7 +62,7 @@ nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=Tr
 helper = PredictHelper(nusc)
 
 
-def run_mpc(scene_num=None):
+def run_mpc(scene_num=None, planner=None):
     " ==== Prepare Data Recording and Plotting ==== "
     # Process data
     mats_outputs_collection = []
@@ -124,7 +125,7 @@ def run_mpc(scene_num=None):
     # MPC parameters, constraints and settings
     control_limits_obj = ControlLimits(0.7, -0.7, 4.0, -5.0, 12.0, 0.0)
     dynamics_obj = DynamicsModel(4, 2, control_limits_obj)
-    iteration_num = 1
+    iteration_num = 5
 
     " ==== MPC process ==== "
 
@@ -160,7 +161,8 @@ def run_mpc(scene_num=None):
         time_start = time.time()
         for i in range(iteration_num):
             # construct MPC
-            mpc = MPCProblem(dynamics_obj, mpc_vals_obj, non_robot_node_ids, initial_state_plan, initial_control_plan)
+            mpc = MPCProblem(dynamics_obj, mpc_vals_obj, non_robot_node_ids,
+                             initial_state_plan, initial_control_plan, planner=planner)
 
             # solve problem
             time_start_solving = time.time()
@@ -272,17 +274,6 @@ def run_mpc(scene_num=None):
 
 
 if __name__ == '__main__':
-    # Get the current date and time
-    current_datetime = datetime.now()
-    formatted_datetime = current_datetime.strftime("%Y-%m-%d-%H-%M")
-    print("Date and Time:", formatted_datetime)
-
-    planner_type = 'MPC'
-
-    workbook_path = ('/home/zxc/codes/MATS/MPC/MPC_example/data/' + planner_type + '-' + formatted_datetime + '.xlsx')
-    workbook = xlsxwriter.Workbook(workbook_path)
-    worksheet = workbook.add_worksheet()
-    workbook.close()
 
     # Event-level meta
     min_distance_in_event_collection = []
@@ -296,10 +287,31 @@ if __name__ == '__main__':
     min_distance_in_plans_collection = []
     progress_in_plans_collection = []
 
-    scene_id_list = range(0, 6)
+    " ==== Single-Scene Running ==== "
+    # scene_id = 23
+    # run_mpc(scene_num=scene_id)
+    # print(f'+++++-----Scene {scene_id} Failed-----+++++')
+
+    " ==== Multi-Scene Running ==== "
+    # planner_type = 'MPC-5-Iteration'  # change the iteration number accordingly
+    # planner_type = 'MPC'  # change the iteration number accordingly
+    planner_type = 'Single-Obstacle'  # this type will change obstacle constraints in mpc.py
+    print('Start' + planner_type)
+
+    # Get the current date and time
+    current_datetime = datetime.now()
+    formatted_datetime = current_datetime.strftime("%Y-%m-%d-%H-%M")
+    print("Date and Time:", formatted_datetime)
+
+    workbook_path = ('/home/zxc/codes/MATS/MPC/MPC_example/data/' + planner_type + '-' + formatted_datetime + '.xlsx')
+    workbook = xlsxwriter.Workbook(workbook_path)
+    worksheet = workbook.add_worksheet()
+    workbook.close()
+
+    scene_id_list = range(185)
     for scene_id in scene_id_list:
         try:
-            run_mpc(scene_num=scene_id)
+            run_mpc(scene_num=scene_id, planner_type=planner_type)
             successful_scene_id_list.append(scene_id)
         except:
             print(f'+++++-----Scene {scene_id} Failed-----+++++')

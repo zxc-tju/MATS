@@ -72,7 +72,8 @@ torch.manual_seed(seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(seed)
 
-nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'
+# nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
+nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
 nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=True)
 helper = PredictHelper(nusc)
 
@@ -157,7 +158,7 @@ for idx in trange(len(mats_outputs)):
     # Plot predicted timestep for random scene in map
     my_patch = (x_min, y_min, x_max, y_max)
 
-    fig, ax = nusc_map.render_map_patch(my_patch, layers, figsize=(7, 7), alpha=0.1, render_egoposes_range=False)
+    fig, ax = nusc_map.render_map_patch(my_patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
 
     # Plot predicted timestep for random scene
     # visualization.visualize_prediction(ax,
