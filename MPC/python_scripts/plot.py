@@ -404,23 +404,22 @@ def plot_vehicle_dist(ax, predictions, scene,
 
 
 def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
-                          nusc_map=None,nuscenes_map=None,
-                          max_hl=10, ph=6, pi_threshold=0.05,
+                          nusc_map=None, max_hl=10, ph=6, pi_threshold=0.05,
                           x_min=0, y_min=0,
                           robot_plan=None, scene_num=None):
 
     for t in range(len(mats_outputs_collection)):
         fig, ax = nusc_map.render_map_patch(patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
 
-        if nuscenes_map is not None:
-            ax.imshow(nuscenes_map.fdata, origin='lower', alpha=0.5)
+        # if nusc_map is not None:
+        #     ax.imshow(nusc_map.fdata, origin='lower', alpha=0.5)
 
         # get prediction results
         prediction_distributions = mats_outputs_collection[t][0]
         prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(prediction_distributions,
                                                                                           max_hl,
                                                                                           ph,
-                                                                                          map=nuscenes_map)
+                                                                                          map=None)
 
         assert (len(prediction_dict.keys()) <= 1)
         if len(prediction_dict.keys()) == 0:
@@ -520,7 +519,7 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                 path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
 
         if robot_plan is not None:
-            future_plan = robot_plan[t][0:2, :6]
+            future_plan = robot_plan[t][0:2, :]
             future_plan = future_plan.T
             ax.plot(future_plan[:, 0],
                     future_plan[:, 1],
