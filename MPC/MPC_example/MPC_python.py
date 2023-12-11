@@ -311,7 +311,7 @@ if __name__ == '__main__':
     scene_id_list = range(185)
     for scene_id in scene_id_list:
         try:
-            run_mpc(scene_num=scene_id, planner_type=planner_type)
+            run_mpc(scene_num=scene_id, planner=planner_type)
             successful_scene_id_list.append(scene_id)
         except:
             print(f'+++++-----Scene {scene_id} Failed-----+++++')
