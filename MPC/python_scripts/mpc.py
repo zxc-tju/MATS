@@ -214,8 +214,8 @@ class MPCProblem:
         self.u = self.model.variable(vals.control_dim, vals.S_control)
         self.initial_state_plan = initial_state_plan  # [x, y, heading, v, s]
         self.initial_control_plan = initial_control_plan
-        self.construct_problem()
         self.planner_type = planner
+        self.construct_problem()
 
     def construct_problem(self):
         self.state_constraints()

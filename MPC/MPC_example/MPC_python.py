@@ -62,7 +62,7 @@ nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=Tr
 helper = PredictHelper(nusc)
 
 
-def run_mpc(scene_num=None, planner=None):
+def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False):
     " ==== Prepare Data Recording and Plotting ==== "
     # Process data
     mats_outputs_collection = []
@@ -216,61 +216,63 @@ def run_mpc(scene_num=None, planner=None):
         mats_outputs_collection.append(mats_outputs)
 
     " ==== Visualize Results ==== "
-    # Plot predicted timestep
-    # plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
-    #                                       max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
-    #                                       y_min=scene.y_min,
-    #                                       robot_plan=robot_plan_collection, scene_num=scene_num)
+    if plot_fig:
+        # Plot predicted timestep
+        plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
+                                              max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
+                                              y_min=scene.y_min,
+                                              robot_plan=robot_plan_collection, scene_num=scene_num)
 
     " ==== Analyze and Save Meta ==== "
-    # we have recorded data of robot_plan_collection, robot_state_collection, mats_outputs_collection
-    # Settings
-    position_state = {'position': ['x', 'y']}
+    if save_meta:
+        # we have recorded data of robot_plan_collection, robot_state_collection, mats_outputs_collection
+        # Settings
+        position_state = {'position': ['x', 'y']}
 
-    # refresh for each scene
-    min_distance_in_event = 999
+        # refresh for each scene
+        min_distance_in_event = 999
 
-    robot_state_collection_array = np.array(robot_state_collection)
-    robot_trajectory = robot_state_collection_array[:, 0:2]
-    for i in range(len(mats_outputs_collection)):
-        min_distance_in_plan = 999
-        scenario_time_list = list(mats_outputs_collection[i][0].keys())
-        scenario_time = scenario_time_list[0]
+        robot_state_collection_array = np.array(robot_state_collection)
+        robot_trajectory = robot_state_collection_array[:, 0:2]
+        for i in range(len(mats_outputs_collection)):
+            min_distance_in_plan = 999
+            scenario_time_list = list(mats_outputs_collection[i][0].keys())
+            scenario_time = scenario_time_list[0]
 
-        # robot info
-        robot_plan_array = np.array(robot_plan_collection[i]).T
-        robot_plan = robot_plan_array[:prediction_horizon + 1, 0:2]
-        progress_in_plan = robot_plan_array[prediction_horizon, 4] - robot_plan_array[0, 4]
+            # robot info
+            robot_plan_array = np.array(robot_plan_collection[i]).T
+            robot_plan = robot_plan_array[:prediction_horizon + 1, 0:2]
+            progress_in_plan = robot_plan_array[prediction_horizon, 4] - robot_plan_array[0, 4]
 
-        node_id_list = mats_outputs_collection[i][0][scenario_time].keys()
-        for node in node_id_list:
+            node_id_list = mats_outputs_collection[i][0][scenario_time].keys()
+            for node in node_id_list:
 
-            node_future_trajectory = (
-                    node.get(np.array([scenario_time, scenario_time + prediction_horizon]), position_state)
-                    + np.array([scene.x_min, scene.y_min]))
+                node_future_trajectory = (
+                        node.get(np.array([scenario_time, scenario_time + prediction_horizon]), position_state)
+                        + np.array([scene.x_min, scene.y_min]))
 
-            # distance from ego plan to others' GT future
-            distance_in_plan = np.linalg.norm(robot_plan - node_future_trajectory, axis=1)
-            if np.min(distance_in_plan) < min_distance_in_plan:
-                min_distance_in_plan = np.min(distance_in_plan)
+                # distance from ego plan to others' GT future
+                distance_in_plan = np.linalg.norm(robot_plan - node_future_trajectory, axis=1)
+                if np.min(distance_in_plan) < min_distance_in_plan:
+                    min_distance_in_plan = np.min(distance_in_plan)
 
-            # distance between current positions
-            actual_dis = distance_in_plan[0]
-            if actual_dis < min_distance_in_event:
-                min_distance_in_event = actual_dis
+                # distance between current positions
+                actual_dis = distance_in_plan[0]
+                if actual_dis < min_distance_in_event:
+                    min_distance_in_event = actual_dis
 
-        min_distance_in_plans_collection.append(min_distance_in_plan)
-        progress_in_plans_collection.append(progress_in_plan)
+            min_distance_in_plans_collection.append(min_distance_in_plan)
+            progress_in_plans_collection.append(progress_in_plan)
 
-    min_distance_in_event_collection.append(min_distance_in_event)
-    average_solving_time_collection.append(np.mean(np.array(solving_time_consumption_collection)))
-    average_planning_time_collection.append(np.mean(np.array(full_planning_time_consumption_collection)))
-    progress_in_event_collection.append(robot_state_collection_array[-1, 4])
-    final_state_ground_truth = [robot_node.x[t_range[-1]], robot_node.y[t_range[-1]],
-                                robot_node.theta[t_range[-1]], robot_node.v[t_range[-1]], 0]
-    progress_ground_truth.append(find_best_s(final_state_ground_truth, path_obj, enable_global_search=True))
+        min_distance_in_event_collection.append(min_distance_in_event)
+        average_solving_time_collection.append(np.mean(np.array(solving_time_consumption_collection)))
+        average_planning_time_collection.append(np.mean(np.array(full_planning_time_consumption_collection)))
+        progress_in_event_collection.append(robot_state_collection_array[-1, 4])
+        final_state_ground_truth = [robot_node.x[t_range[-1]], robot_node.y[t_range[-1]],
+                                    robot_node.theta[t_range[-1]], robot_node.v[t_range[-1]], 0]
+        progress_ground_truth.append(find_best_s(final_state_ground_truth, path_obj, enable_global_search=True))
 
-    print(f'=====Scene {scene_num} Finished=====')
+    print(f' ===== Scene {scene_num} Finished ===== ')
 
 
 if __name__ == '__main__':
@@ -288,56 +290,56 @@ if __name__ == '__main__':
     progress_in_plans_collection = []
 
     " ==== Single-Scene Running ==== "
-    # scene_id = 23
-    # run_mpc(scene_num=scene_id)
-    # print(f'+++++-----Scene {scene_id} Failed-----+++++')
+    scene_id = 16
+    run_mpc(scene_num=scene_id, plot_fig=True)
+    print(f' ===== Scene {scene_id} Finished ===== ')
 
     " ==== Multi-Scene Running ==== "
-    # planner_type = 'MPC-5-Iteration'  # change the iteration number accordingly
-    # planner_type = 'MPC'  # change the iteration number accordingly
-    planner_type = 'Single-Obstacle'  # this type will change obstacle constraints in mpc.py
-    print('Start' + planner_type)
-
-    # Get the current date and time
-    current_datetime = datetime.now()
-    formatted_datetime = current_datetime.strftime("%Y-%m-%d-%H-%M")
-    print("Date and Time:", formatted_datetime)
-
-    workbook_path = ('/home/zxc/codes/MATS/MPC/MPC_example/data/' + planner_type + '-' + formatted_datetime + '.xlsx')
-    workbook = xlsxwriter.Workbook(workbook_path)
-    worksheet = workbook.add_worksheet()
-    workbook.close()
-
-    scene_id_list = range(185)
-    for scene_id in scene_id_list:
-        try:
-            run_mpc(scene_num=scene_id, planner=planner_type)
-            successful_scene_id_list.append(scene_id)
-        except:
-            print(f'+++++-----Scene {scene_id} Failed-----+++++')
-            continue
-
-    # prepare data_event
-    data_event = {'scene_id': successful_scene_id_list,
-                  'min_distance_in_event_collection': min_distance_in_event_collection,
-                  'progress_in_event_collection': progress_in_event_collection,
-                  'progress_ground_truth': progress_ground_truth,
-                  'average_solving_time_collection': average_solving_time_collection,
-                  'average_planning_time_collection': average_planning_time_collection}
-
-    pd_event = pd.DataFrame(data_event)
-
-    # prepare data_frame
-    data_frame = {'min_distance_in_plans_collection': min_distance_in_plans_collection,
-                  'progress_in_plans_collection': progress_in_plans_collection}
-    pd_frame = pd.DataFrame(data_frame)
-
-    # write data_event
-    with pd.ExcelWriter(workbook_path, mode='a', if_sheet_exists="overlay", engine="openpyxl") as writer:
-
-        pd_event.to_excel(writer, index=False, header=True, sheet_name='event', startcol=0,
-                          startrow=0)
-        pd_frame.to_excel(writer, index=False, header=True, sheet_name='frame', startcol=0,
-                          startrow=0)
-
-        writer.close()
+    # # planner_type = 'MPC-5-Iteration'  # change the iteration number accordingly
+    # # planner_type = 'MPC'  # change the iteration number accordingly
+    # planner_type = 'Single-Obstacle'  # this type will change obstacle constraints in mpc.py
+    # print('Start' + planner_type)
+    #
+    # # Get the current date and time
+    # current_datetime = datetime.now()
+    # formatted_datetime = current_datetime.strftime("%Y-%m-%d-%H-%M")
+    # print("Date and Time:", formatted_datetime)
+    #
+    # workbook_path = ('/home/zxc/codes/MATS/MPC/MPC_example/data/' + planner_type + '-' + formatted_datetime + '.xlsx')
+    # workbook = xlsxwriter.Workbook(workbook_path)
+    # worksheet = workbook.add_worksheet()
+    # workbook.close()
+    #
+    # scene_id_list = range(185)
+    # for scene_id in scene_id_list:
+    #     try:
+    #         run_mpc(scene_num=scene_id, planner=planner_type, save_meta=True)
+    #         successful_scene_id_list.append(scene_id)
+    #     except:
+    #         print(f'+++++-----Scene {scene_id} Failed-----+++++')
+    #         continue
+    #
+    # # prepare data_event
+    # data_event = {'scene_id': successful_scene_id_list,
+    #               'min_distance_in_event_collection': min_distance_in_event_collection,
+    #               'progress_in_event_collection': progress_in_event_collection,
+    #               'progress_ground_truth': progress_ground_truth,
+    #               'average_solving_time_collection': average_solving_time_collection,
+    #               'average_planning_time_collection': average_planning_time_collection}
+    #
+    # pd_event = pd.DataFrame(data_event)
+    #
+    # # prepare data_frame
+    # data_frame = {'min_distance_in_plans_collection': min_distance_in_plans_collection,
+    #               'progress_in_plans_collection': progress_in_plans_collection}
+    # pd_frame = pd.DataFrame(data_frame)
+    #
+    # # write data_event
+    # with pd.ExcelWriter(workbook_path, mode='a', if_sheet_exists="overlay", engine="openpyxl") as writer:
+    #
+    #     pd_event.to_excel(writer, index=False, header=True, sheet_name='event', startcol=0,
+    #                       startrow=0)
+    #     pd_frame.to_excel(writer, index=False, header=True, sheet_name='frame', startcol=0,
+    #                       startrow=0)
+    #
+    #     writer.close()
