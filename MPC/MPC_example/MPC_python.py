@@ -62,7 +62,7 @@ nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=Tr
 helper = PredictHelper(nusc)
 
 
-def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False):
+def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False, t_range=range(2, 20), my_patch=None):
     " ==== Prepare Data Recording and Plotting ==== "
     # Process data
     mats_outputs_collection = []
@@ -71,7 +71,7 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False):
     solving_time_consumption_collection = []
     full_planning_time_consumption_collection = []
 
-    t_range = range(2, 20)
+    # t_range = range(2, 20)
     if not os.path.isdir('./data'):
         os.mkdir('./data')
 
@@ -101,14 +101,15 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False):
     robot_node, non_robot_nodes, non_robot_node_ids = get_scene_info(env, scene_num)
 
     # Configure figure center
-    x_center = robot_node.x[t_range[0]]
-    y_center = robot_node.y[t_range[0]]
-    x_min = x_center - 25.0
-    y_min = y_center - 55.0
-    x_max = x_center + 75.0
-    y_max = y_center + 55.0
+    if my_patch is None:
+        x_center = robot_node.x[t_range[0]]
+        y_center = robot_node.y[t_range[0]]
+        x_min = x_center - 25.0
+        y_min = y_center - 55.0
+        x_max = x_center + 75.0
+        y_max = y_center + 55.0
 
-    my_patch = (x_min, y_min, x_max, y_max)
+        my_patch = (x_min, y_min, x_max, y_max)
 
     " ==== MPC settings ==== "
     # model prediction settings
@@ -138,7 +139,7 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False):
     robot_state_collection.append(q0)
 
     mpc_vals_obj = MPCValues(path_obj, initial_state=q0,
-                             num_modes=num_modes, horizon=13,
+                             num_modes=num_modes, horizon=7,
                              consensus_horizon=4, num_obstacles=len(non_robot_nodes), timestep=scene.dt)
 
     # make first predictions for obstacle constraints
@@ -222,6 +223,10 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False):
                                               max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
                                               y_min=scene.y_min,
                                               robot_plan=robot_plan_collection, scene_num=scene_num)
+        # plotting_helper.plot_A_B(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
+        #                                       max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
+        #                                       y_min=scene.y_min,
+        #                                       robot_plan=robot_plan_collection, scene_num=scene_num)
 
     " ==== Analyze and Save Meta ==== "
     if save_meta:
@@ -290,14 +295,15 @@ if __name__ == '__main__':
     progress_in_plans_collection = []
 
     " ==== Single-Scene Running ==== "
+    # 16: many pedestrian t=(2,24)  ROI=[870, 1590, 930, 1640]
     scene_id = 16
-    run_mpc(scene_num=scene_id, plot_fig=True)
+    run_mpc(scene_num=scene_id, plot_fig=True, t_range=range(2, 24), my_patch=[880, 1590, 930, 1630])
     print(f' ===== Scene {scene_id} Finished ===== ')
 
     " ==== Multi-Scene Running ==== "
     # # planner_type = 'MPC-5-Iteration'  # change the iteration number accordingly
     # # planner_type = 'MPC'  # change the iteration number accordingly
-    # planner_type = 'Single-Obstacle'  # this type will change obstacle constraints in mpc.py
+    # planner_type = 'Single-Obstacle'  # this type will change obstacle constraints in mpc.py  Iter=5
     # print('Start' + planner_type)
     #
     # # Get the current date and time

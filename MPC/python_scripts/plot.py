@@ -23,9 +23,11 @@ sys.path.append("../../mats")
 LINE_ALPHA = 0.8
 LINE_WIDTH = 0.2
 EDGE_WIDTH = 2
-CIRCLE_EDGE_WIDTH = 0.5
-NODE_CIRCLE_SIZE = 0.3
+CIRCLE_EDGE_WIDTH = 0
+NODE_CIRCLE_SIZE = 0.4
 CAR_IMG_ZOOM = 0.02
+VEHICLE_WIDTH, VEHICLE_HEIGHT = 2, 4
+FUTURE_LINE_WIDTH = 5
 
 
 line_colors = ['#375397',
@@ -430,7 +432,6 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
         histories_dict = histories_dict[ts_key]
         futures_dict = futures_dict[ts_key]
 
-        i = 0
         node_list = sorted(histories_dict.keys(), key=lambda x: x.id)
         for node in node_list:
             history = histories_dict[node] + np.array([x_min, y_min])
@@ -452,23 +453,21 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                     plot_node_Gaussian_distribution(means, covariances, ax, possibility)
 
                 # Future
-                ax.plot(future[:, 0],
-                        future[:, 1],
-                        'w--o',
-                        linewidth=4,
-                        markersize=3,
-                        zorder=650,
-                        path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
+                # Create a custom color gradient from dark blue to light yellow
+                colors = [plt.cm.viridis(i / len(future)) for i in range(len(future))]
 
-                # Put a car icon at current position
-                r_img = rotate(cars[i % len(cars)],
-                               node.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi,
-                               reshape=True)
-                oi = OffsetImage(r_img, zoom=CAR_IMG_ZOOM, zorder=700)
-                veh_box = AnnotationBbox(oi, (history[-1, 0], history[-1, 1]), frameon=False)
-                veh_box.zorder = 700
-                ax.add_artist(veh_box)
-                i += 1
+                for i in range(np.size(future, 0) - 1):
+                    # Draw the segment
+                    ax.plot([future[i, 0], future[i + 1, 0]],
+                            [future[i, 1], future[i + 1, 1]],
+                            color=colors[i], linewidth=FUTURE_LINE_WIDTH/2, zorder=650)
+
+                # Current position
+                angle = node.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi - 90
+                rect = patches.Rectangle((history[-1, 0] + VEHICLE_WIDTH/2, history[-1, 1] + VEHICLE_HEIGHT/2),
+                                         VEHICLE_WIDTH, VEHICLE_HEIGHT, angle=angle, color='gray', alpha=0.7)
+                rect.zorder = 700
+                ax.add_patch(rect)
 
             elif node.type.name in {'PEDESTRIAN'}:
 
@@ -484,11 +483,14 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                     plot_node_Gaussian_distribution(means, covariances, ax, possibility)
 
                 # Future
-                ax.plot(future[:, 0],
-                        future[:, 1],
-                        'w--',
-                        zorder=650,
-                        path_effects=[pe.Stroke(linewidth=EDGE_WIDTH, foreground='k'), pe.Normal()])
+                # Create a custom color gradient from dark blue to light yellow
+                colors = [plt.cm.viridis(i / len(future)) for i in range(len(future))]
+
+                for i in range(np.size(future, 0) - 1):
+                    # Draw the segment
+                    ax.plot([future[i, 0], future[i + 1, 0]],
+                            [future[i, 1], future[i + 1, 1]],
+                            color=colors[i], linewidth=FUTURE_LINE_WIDTH/2, zorder=650)
 
                 # Current Node Position
                 circle = plt.Circle((history[-1, 0],
@@ -500,48 +502,45 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                                     zorder=3)
                 ax.add_artist(circle)
 
-        # Visualizing the ego-vehicle as well.
-        position_state = {'position': ['x', 'y']}
-        history = scene.robot.get(np.array([ts_key - max_hl, ts_key]), position_state)  # History includes current pos
-        history = history[~np.isnan(history.sum(axis=1))]
-        history += np.array([x_min, y_min])
-
-        future = scene.robot.get(np.array([ts_key + 1, ts_key + ph]), position_state)
-        future = future[~np.isnan(future.sum(axis=1))]
-        future += np.array([x_min, y_min])
-
-        ax.plot(future[:, 0],
-                future[:, 1],
-                'w-o',
-                linewidth=4,
-                markersize=3,
-                zorder=750,
-                path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
-
         if robot_plan is not None:
             future_plan = robot_plan[t][0:2, :]
             future_plan = future_plan.T
-            ax.plot(future_plan[:, 0],
-                    future_plan[:, 1],
-                    'r--o',
-                    linewidth=4,
-                    markersize=3,
-                    zorder=750,
-                    path_effects=[pe.Stroke(linewidth=5, foreground='k'), pe.Normal()])
 
-        r_img = rotate(robot, scene.robot.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi,
-                       reshape=True)
-        oi = OffsetImage(r_img, zoom=CAR_IMG_ZOOM, zorder=700)
-        veh_box = AnnotationBbox(oi, (history[-1, 0], history[-1, 1]), frameon=False)
-        veh_box.zorder = 700
-        ax.add_artist(veh_box)
+            # Create a custom color gradient from dark blue to light yellow
+            colors = [plt.cm.viridis(i / len(future_plan)) for i in range(len(future_plan))]
+
+            for i in range(np.size(future_plan, 0) - 1):
+                # Draw the segment
+                ax.plot([future_plan[i, 0], future_plan[i + 1, 0]],
+                        [future_plan[i, 1], future_plan[i + 1, 1]],
+                        color=colors[i], linewidth=FUTURE_LINE_WIDTH, zorder=650)
+
+            # Draw the rectangle for the current position
+            angle = robot_plan[t][2, 0] * 180 / np.pi - 90
+            rect = patches.Rectangle((future_plan[0, 0] + VEHICLE_WIDTH / 2, future_plan[0, 1] + VEHICLE_HEIGHT / 2),
+                                     VEHICLE_WIDTH, VEHICLE_HEIGHT, angle=angle, color='blue', alpha=0.9)
+            rect.zorder = 700
+            ax.add_patch(rect)
+
+        # r_img = rotate(robot, scene.robot.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi,
+        #                reshape=True)
+        # oi = OffsetImage(r_img, zoom=CAR_IMG_ZOOM, zorder=700)
+        # veh_box = AnnotationBbox(oi, (history[-1, 0], history[-1, 1]), frameon=False)
+        # veh_box.zorder = 700
+        # ax.add_artist(veh_box)
+
+        ax.set_aspect('equal')
 
         fig.savefig('plots/scene_' + str(scene_num) + '_t_' + str(t) + '.png', dpi=300, bbox_inches='tight')
 
 
+def plot_A_B():
+    pass
+
+
 def plot_node_Gaussian_distribution(means, covs, ax, possibility):
     ax.plot(means[..., 0], means[..., 1],
-            '-o', markersize=3,
+            '-o', markersize=1,
             color=cmap[1],
             linewidth=LINE_WIDTH,
             alpha=LINE_ALPHA,
@@ -561,5 +560,5 @@ def plot_node_Gaussian_distribution(means, covs, ax, possibility):
         ell = patches.Ellipse(mean, v[0], v[1], 180. + angle, color='blue', zorder=600)
         ell.set_edgecolor(None)
         ell.set_clip_box(ax.bbox)
-        ell.set_alpha(possibility / 3.)
+        ell.set_alpha(possibility / 5.)
         ax.add_artist(ell)
