@@ -8,6 +8,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import matplotlib.patches as patches
 from scipy.ndimage import rotate
 from scipy import linalg
+from tqdm import tqdm, trange
 import seaborn as sns
 import torch
 import dill
@@ -19,6 +20,8 @@ from nuscenes.map_expansion.map_api import NuScenesMap
 
 sys.path.append("../../mats")
 # from model.model_registrar import ModelRegistrar
+from utils import calculate_A_slices, calculate_BQ_slices
+
 # # from model.mats import MATS
 LINE_ALPHA = 0.8
 LINE_WIDTH = 0.2
@@ -28,7 +31,6 @@ NODE_CIRCLE_SIZE = 0.4
 CAR_IMG_ZOOM = 0.02
 VEHICLE_WIDTH, VEHICLE_HEIGHT = 2, 4
 FUTURE_LINE_WIDTH = 5
-
 
 line_colors = ['#375397',
                #                '#F05F78',
@@ -408,13 +410,14 @@ def plot_vehicle_dist(ax, predictions, scene,
 def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                           nusc_map=None, max_hl=10, ph=6, pi_threshold=0.05,
                           x_min=0, y_min=0,
-                          robot_plan=None, scene_num=None):
+                          robot_plan=None, scene_num=None,
+                          plot_path=None):
+    plot_path = plot_path + '/scene_' + str(scene_num) + '/'
+    if not os.path.isdir(plot_path):
+        os.mkdir(plot_path)
 
     for t in range(len(mats_outputs_collection)):
-        fig, ax = nusc_map.render_map_patch(patch, layers, figsize=(23, 15), alpha=0.1, render_egoposes_range=False)
-
-        # if nusc_map is not None:
-        #     ax.imshow(nusc_map.fdata, origin='lower', alpha=0.5)
+        fig, ax = nusc_map.render_map_patch(patch, layers, figsize=(23, 15), alpha=0.06, render_egoposes_range=False)
 
         # get prediction results
         prediction_distributions = mats_outputs_collection[t][0]
@@ -460,11 +463,11 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                     # Draw the segment
                     ax.plot([future[i, 0], future[i + 1, 0]],
                             [future[i, 1], future[i + 1, 1]],
-                            color=colors[i], linewidth=FUTURE_LINE_WIDTH/2, zorder=650)
+                            color=colors[i], linewidth=FUTURE_LINE_WIDTH / 2, zorder=650)
 
                 # Current position
                 angle = node.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi - 90
-                rect = patches.Rectangle((history[-1, 0] + VEHICLE_WIDTH/2, history[-1, 1] + VEHICLE_HEIGHT/2),
+                rect = patches.Rectangle((history[-1, 0] + VEHICLE_WIDTH / 2, history[-1, 1] + VEHICLE_HEIGHT / 2),
                                          VEHICLE_WIDTH, VEHICLE_HEIGHT, angle=angle, color='gray', alpha=0.7)
                 rect.zorder = 700
                 ax.add_patch(rect)
@@ -490,7 +493,7 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                     # Draw the segment
                     ax.plot([future[i, 0], future[i + 1, 0]],
                             [future[i, 1], future[i + 1, 1]],
-                            color=colors[i], linewidth=FUTURE_LINE_WIDTH/2, zorder=650)
+                            color=colors[i], linewidth=FUTURE_LINE_WIDTH / 2, zorder=650)
 
                 # Current Node Position
                 circle = plt.Circle((history[-1, 0],
@@ -522,20 +525,192 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
             rect.zorder = 700
             ax.add_patch(rect)
 
-        # r_img = rotate(robot, scene.robot.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi,
-        #                reshape=True)
-        # oi = OffsetImage(r_img, zoom=CAR_IMG_ZOOM, zorder=700)
-        # veh_box = AnnotationBbox(oi, (history[-1, 0], history[-1, 1]), frameon=False)
-        # veh_box.zorder = 700
-        # ax.add_artist(veh_box)
+        ax.set_aspect('equal')
+        path = plot_path + 'Gaussian'
+        if not os.path.isdir(path):
+            os.mkdir(path)
+        fig.savefig(path + '/t_' + str(t) + '.png', dpi=300, bbox_inches='tight')
+
+
+def plot_A(patch, layers, mats_outputs_collection, scene,
+           nusc_map=None, max_hl=10, ph=6, pi_threshold=0.05,
+           x_min=0, y_min=0,
+           robot_plan=None, scene_num=None,
+           plot_path=None):
+
+    plot_path = plot_path + '/scene_' + str(scene_num) + '/'
+    if not os.path.isdir(plot_path):
+        os.mkdir(plot_path)
+
+    for t in range(len(mats_outputs_collection)):
+        fig, ax = nusc_map.render_map_patch(patch, layers, figsize=(23, 15), alpha=0.06, render_egoposes_range=False)
+
+        # get prediction results
+        prediction_distributions, _, As, _, _, _, state_lengths_in_order = mats_outputs_collection[t]
+
+        prediction_dict, histories_dict, futures_dict = prediction_output_to_trajectories(prediction_distributions,
+                                                                                          max_hl,
+                                                                                          ph,
+                                                                                          map=None)
+
+        assert (len(prediction_dict.keys()) <= 1)
+        if len(prediction_dict.keys()) == 0:
+            print("t", t)
+        ts_key = list(prediction_dict.keys())[0]
+        prediction_dict = prediction_dict[ts_key]
+        histories_dict = histories_dict[ts_key]
+        futures_dict = futures_dict[ts_key]
+
+        " ------------Plot A Matrix----------------- "
+        # get A matrix
+        random_dist = next(iter(prediction_distributions[ts_key].values()))
+        pis = random_dist.pis
+        # index of the most likely mode
+        ml_pi_idx = torch.argmax(pis).item()
+
+        A = As[0]
+        summed_state_lengths_in_order = torch.zeros(
+            (state_lengths_in_order.shape[0], state_lengths_in_order.shape[1] + 1),
+            dtype=state_lengths_in_order.dtype)
+        summed_state_lengths_in_order[:, 1:] = torch.cumsum(state_lengths_in_order, dim=1)
+
+        ordered_nodes = [scene.robot] + list(prediction_distributions[ts_key].keys())
+        relation_magnitudes = np.zeros((A.shape[0], len(ordered_nodes), len(ordered_nodes)))
+        for ts in trange(A.shape[0]):
+            for orig_idx, orig_node in enumerate(ordered_nodes):
+                for dest_idx, dest_node in enumerate(ordered_nodes):
+                    if orig_idx == dest_idx:
+                        continue
+
+                    rows, cols = calculate_A_slices(orig_idx, dest_idx,
+                                                    state_lengths_in_order[0],
+                                                    summed_state_lengths_in_order[0])
+
+                    relation_magnitudes[ts, dest_idx, orig_idx] = np.linalg.norm(A[ts, 0, ml_pi_idx, rows, cols])
+
+        normed_magnitudes = relation_magnitudes / (relation_magnitudes.sum(axis=2, keepdims=True) + 1e-6)
+
+        fig_A, ax_A = plt.subplots(figsize=(10, 8))
+        sns.heatmap(normed_magnitudes[0], cmap='YlOrRd',
+                    annot=True, cbar=True, square=True,
+                    fmt=".2f", ax=ax_A)
+
+        path = plot_path + 'A_Matrix'
+        if not os.path.isdir(path):
+            os.mkdir(path)
+        fig_A.savefig(path + '/t_' + str(t) + '.png', dpi=300)
+
+        " ------------Plot A Connections----------------- "
+        # current node list
+        node_list = sorted(histories_dict.keys(), key=lambda x: x.id)
+
+        future_plan = robot_plan[t][0:2, :]
+        future_plan = future_plan.T
+
+        position_state = {'position': ['x', 'y']}
+        for orig_idx, orig_node in enumerate(ordered_nodes):
+            for dest_idx, dest_node in enumerate(ordered_nodes):
+
+                if orig_idx == dest_idx:
+                    continue
+
+                curr_orig = orig_node.get(np.array([ts_key]), position_state) + np.array([x_min, y_min])
+                curr_dest = dest_node.get(np.array([ts_key]), position_state) + np.array([x_min, y_min])
+
+                if orig_idx == 0:
+                    curr_orig = future_plan
+                if dest_idx == 0:
+                    curr_dest = future_plan
+
+                # Check if the node is in the ROI
+                patch_x_min, patch_y_min, patch_x_max, patch_y_max = patch
+                if (patch_x_min < curr_orig[0, 0] < patch_x_max and patch_y_min < curr_orig[0, 1] < patch_y_max and
+                        patch_x_min < curr_dest[0, 0] < patch_x_max and patch_y_min < curr_dest[0, 1] < patch_y_max):
+
+                    line_weight = normed_magnitudes[0, dest_idx, orig_idx]
+                    if line_weight < 0.05:
+                        line_weight = 0
+                    else:
+                        line_weight = line_weight * 2
+
+                    ax.plot([curr_orig[0, 0], curr_dest[0, 0]],
+                            [curr_orig[0, 1], curr_dest[0, 1]],
+                            c='k', linewidth=line_weight)
+
+        " ------------Plot Agents----------------- "
+        for node in node_list:
+            history = histories_dict[node] + np.array([x_min, y_min])
+            future = futures_dict[node] + np.array([x_min, y_min])
+            predictions = prediction_dict[node]
+            pis = predictions.pis  # the possibility of a mode
+
+            if node.type.name == 'VEHICLE':
+
+                # Future
+                # Create a custom color gradient from dark blue to light yellow
+                colors = [plt.cm.viridis(i / len(future)) for i in range(len(future))]
+
+                for i in range(np.size(future, 0) - 1):
+                    # Draw the segment
+                    ax.plot([future[i, 0], future[i + 1, 0]],
+                            [future[i, 1], future[i + 1, 1]],
+                            color=colors[i], linewidth=FUTURE_LINE_WIDTH / 2, zorder=650, alpha=0.5)
+
+                # Current position
+                angle = node.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi - 90
+                rect = patches.Rectangle((history[-1, 0] + VEHICLE_WIDTH / 2, history[-1, 1] + VEHICLE_HEIGHT / 2),
+                                         VEHICLE_WIDTH, VEHICLE_HEIGHT, angle=angle, color='gray', alpha=0.7)
+                rect.zorder = 700
+                ax.add_patch(rect)
+
+            elif node.type.name in {'PEDESTRIAN'}:
+
+                # Future
+                # Create a custom color gradient from dark blue to light yellow
+                colors = [plt.cm.viridis(i / len(future)) for i in range(len(future))]
+
+                for i in range(np.size(future, 0) - 1):
+                    # Draw the segment
+                    ax.plot([future[i, 0], future[i + 1, 0]],
+                            [future[i, 1], future[i + 1, 1]],
+                            color=colors[i], linewidth=FUTURE_LINE_WIDTH / 2, zorder=650, alpha=0.5)
+
+                # Current Node Position
+                circle = plt.Circle((history[-1, 0],
+                                     history[-1, 1]),
+                                    NODE_CIRCLE_SIZE,
+                                    facecolor='g',
+                                    edgecolor='k',
+                                    lw=CIRCLE_EDGE_WIDTH,
+                                    zorder=3)
+                ax.add_artist(circle)
+
+        if robot_plan is not None:
+            future_plan = robot_plan[t][0:2, :]
+            future_plan = future_plan.T
+
+            # Create a custom color gradient from dark blue to light yellow
+            colors = [plt.cm.viridis(i / len(future_plan)) for i in range(len(future_plan))]
+
+            for i in range(np.size(future_plan, 0) - 1):
+                # Draw the segment
+                ax.plot([future_plan[i, 0], future_plan[i + 1, 0]],
+                        [future_plan[i, 1], future_plan[i + 1, 1]],
+                        color=colors[i], linewidth=FUTURE_LINE_WIDTH, zorder=650)
+
+            # Draw the rectangle for the current position
+            angle = robot_plan[t][2, 0] * 180 / np.pi - 90
+            rect = patches.Rectangle((future_plan[0, 0] + VEHICLE_WIDTH / 2, future_plan[0, 1] + VEHICLE_HEIGHT / 2),
+                                     VEHICLE_WIDTH, VEHICLE_HEIGHT, angle=angle, color='blue', alpha=0.9)
+            rect.zorder = 700
+            ax.add_patch(rect)
 
         ax.set_aspect('equal')
 
-        fig.savefig('plots/scene_' + str(scene_num) + '_t_' + str(t) + '.png', dpi=300, bbox_inches='tight')
-
-
-def plot_A_B():
-    pass
+        path = plot_path + 'A_Connection'
+        if not os.path.isdir(path):
+            os.mkdir(path)
+        fig.savefig(path + '/t_' + str(t) + '.png', dpi=300, bbox_inches='tight')
 
 
 def plot_node_Gaussian_distribution(means, covs, ax, possibility):
@@ -560,5 +735,5 @@ def plot_node_Gaussian_distribution(means, covs, ax, possibility):
         ell = patches.Ellipse(mean, v[0], v[1], 180. + angle, color='blue', zorder=600)
         ell.set_edgecolor(None)
         ell.set_clip_box(ax.bbox)
-        ell.set_alpha(possibility / 5.)
+        ell.set_alpha(possibility / 8.)
         ax.add_artist(ell)

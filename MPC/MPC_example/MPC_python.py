@@ -62,7 +62,9 @@ nusc = NuScenes(version='v1.0-trainval', dataroot=nuScenes_data_path, verbose=Tr
 helper = PredictHelper(nusc)
 
 
-def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False, t_range=range(2, 20), my_patch=None):
+def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False,
+            t_range=range(2, 20), my_patch=None,
+            plot_path=None):
     " ==== Prepare Data Recording and Plotting ==== "
     # Process data
     mats_outputs_collection = []
@@ -219,14 +221,15 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False, t_ran
     " ==== Visualize Results ==== "
     if plot_fig:
         # Plot predicted timestep
-        plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
-                                              max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
-                                              y_min=scene.y_min,
-                                              robot_plan=robot_plan_collection, scene_num=scene_num)
-        # plotting_helper.plot_A_B(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
+        # plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
         #                                       max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
         #                                       y_min=scene.y_min,
-        #                                       robot_plan=robot_plan_collection, scene_num=scene_num)
+        #                                       robot_plan=robot_plan_collection, scene_num=scene_num,
+        #                                       plot_path=plot_path)
+        plotting_helper.plot_A(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map, max_hl=max_hl,
+                               ph=prediction_horizon, x_min=scene.x_min, y_min=scene.y_min,
+                               robot_plan=robot_plan_collection, scene_num=scene_num,
+                               plot_path=plot_path)
 
     " ==== Analyze and Save Meta ==== "
     if save_meta:
@@ -297,7 +300,9 @@ if __name__ == '__main__':
     " ==== Single-Scene Running ==== "
     # 16: many pedestrian t=(2,24)  ROI=[870, 1590, 930, 1640]
     scene_id = 16
-    run_mpc(scene_num=scene_id, plot_fig=True, t_range=range(2, 24), my_patch=[880, 1590, 930, 1630])
+    run_mpc(scene_num=scene_id, plot_fig=True, t_range=range(2, 24),
+            my_patch=[880, 1590, 930, 1630],
+            plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
     print(f' ===== Scene {scene_id} Finished ===== ')
 
     " ==== Multi-Scene Running ==== "
