@@ -26,6 +26,7 @@ from utils import prediction_output_to_trajectories
 " ==== Prepare model and data ==== "
 # Load processed data
 env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_train_val_full_doubled.pkl")
+# env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full_doubled.pkl")
 
 # Raw data for plots
 # nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
@@ -221,12 +222,16 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False,
     " ==== Visualize Results ==== "
     if plot_fig:
         # Plot predicted timestep
-        # plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
-        #                                       max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
-        #                                       y_min=scene.y_min,
-        #                                       robot_plan=robot_plan_collection, scene_num=scene_num,
-        #                                       plot_path=plot_path)
+        plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
+                                              max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
+                                              y_min=scene.y_min,
+                                              robot_plan=robot_plan_collection, scene_num=scene_num,
+                                              plot_path=plot_path)
         plotting_helper.plot_A(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map, max_hl=max_hl,
+                               ph=prediction_horizon, x_min=scene.x_min, y_min=scene.y_min,
+                               robot_plan=robot_plan_collection, scene_num=scene_num,
+                               plot_path=plot_path)
+        plotting_helper.plot_B(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map, max_hl=max_hl,
                                ph=prediction_horizon, x_min=scene.x_min, y_min=scene.y_min,
                                robot_plan=robot_plan_collection, scene_num=scene_num,
                                plot_path=plot_path)
@@ -298,12 +303,18 @@ if __name__ == '__main__':
     progress_in_plans_collection = []
 
     " ==== Single-Scene Running ==== "
-    # 16: many pedestrian t=(2,24)  ROI=[870, 1590, 930, 1640]
-    scene_id = 16
-    run_mpc(scene_num=scene_id, plot_fig=True, t_range=range(2, 24),
-            my_patch=[880, 1590, 930, 1630],
-            plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
-    print(f' ===== Scene {scene_id} Finished ===== ')
+    # train_val_full_doubled 16: many pedestrian t=(2,24)  ROI=[870, 1590, 930, 1640]
+    # val_full_doubled 23: cross interaction t=(2,18)  ROI=None
+
+    # scene_id = 23
+    # run_mpc(scene_num=scene_id, plot_fig=True, t_range=range(2, 18),
+    #         my_patch=None,
+    #         plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
+
+    scene_id = {7, 16, 18, 30, 39, 57, 61, 62, 73, 74, 85, 92, 96}
+    for idx in scene_id:
+        run_mpc(scene_num=idx, plot_fig=True,
+                plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
 
     " ==== Multi-Scene Running ==== "
     # # planner_type = 'MPC-5-Iteration'  # change the iteration number accordingly
