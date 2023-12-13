@@ -413,6 +413,9 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
                           x_min=0, y_min=0,
                           robot_plan=None, scene_num=None,
                           plot_path=None):
+    if not os.path.isdir(plot_path):
+        os.mkdir(plot_path)
+
     plot_path = plot_path + '/scene_' + str(scene_num) + '/'
     if not os.path.isdir(plot_path):
         os.mkdir(plot_path)
@@ -524,7 +527,7 @@ def plot_multi_frame_dist(patch, layers, mats_outputs_collection, scene,
         path = plot_path + 'Gaussian'
         if not os.path.isdir(path):
             os.mkdir(path)
-        fig.savefig(path + '/t_' + str(t) + '.png', dpi=600, bbox_inches='tight')
+        fig.savefig(path + '/t_' + str(t) + '.png', dpi=300, bbox_inches='tight')
         fig.savefig(path + '/t_' + str(t) + '.svg', bbox_inches='tight')
 
 
@@ -584,6 +587,13 @@ def plot_A(patch, layers, mats_outputs_collection, scene,
                     relation_magnitudes[ts, dest_idx, orig_idx] = np.linalg.norm(A[ts, 0, ml_pi_idx, rows, cols])
 
         normed_magnitudes = relation_magnitudes / (relation_magnitudes.sum(axis=2, keepdims=True) + 1e-6)
+        # average value in the following [ph] steps
+        mean_normed_magnitude = np.linalg.norm(normed_magnitudes[:, :, 0], axis=0)
+        mean_normed_magnitude = mean_normed_magnitude - mean_normed_magnitude.min()
+        mean_normed_magnitude = mean_normed_magnitude / mean_normed_magnitude.max()
+        max_normed_magnitude = np.max(normed_magnitudes[:, :, 0], axis=0)
+        max_normed_magnitude = max_normed_magnitude - max_normed_magnitude.min()
+        max_normed_magnitude = max_normed_magnitude / max_normed_magnitude.max()
 
         fig_A, ax_A = plt.subplots(figsize=(10, 8))
         sns.heatmap(normed_magnitudes[0], cmap='YlOrRd', vmin=0.0, vmax=1.0,
@@ -593,7 +603,7 @@ def plot_A(patch, layers, mats_outputs_collection, scene,
         path = plot_path + 'A_Matrix'
         if not os.path.isdir(path):
             os.mkdir(path)
-        fig_A.savefig(path + '/t_' + str(t) + '.png', dpi=600)
+        fig_A.savefig(path + '/t_' + str(t) + '.png', dpi=300)
         fig_A.savefig(path + '/t_' + str(t) + '.svg')
 
         " ------------Plot A Connections----------------- "
@@ -631,10 +641,12 @@ def plot_A(patch, layers, mats_outputs_collection, scene,
 
                     ax.plot([curr_orig[0, 0], curr_dest[0, 0]],
                             [curr_orig[0, 1], curr_dest[0, 1]],
-                            c='k', linewidth=line_weight)
+                            c='k', linewidth=line_weight, alpha=0.7 * line_weight)
 
         " ------------Plot Agents----------------- "
-        for node in node_list:
+        for node_idx, node in enumerate(ordered_nodes):
+            if node_idx == 0:
+                continue
             history = histories_dict[node] + np.array([x_min, y_min])
             future = futures_dict[node] + np.array([x_min, y_min])
             predictions = prediction_dict[node]
@@ -653,8 +665,9 @@ def plot_A(patch, layers, mats_outputs_collection, scene,
                             color=colors[i], linewidth=FUTURE_LINE_WIDTH / 2, zorder=650, alpha=0.5)
 
                 # Current position
+                alpha_weight = mean_normed_magnitude[node_idx]
                 angle = node.get(np.array([ts_key]), {'heading': ['°']})[0, 0] * 180 / np.pi - 90
-                plot_rectangle(current_position=history[-1, :], angle=angle, ax=ax, color='gray', alpha=0.7)
+                plot_rectangle(current_position=history[-1, :], angle=angle, ax=ax, color='red', alpha=0.7 * alpha_weight)
 
             elif node.type.name in {'PEDESTRIAN'}:
 
@@ -669,13 +682,14 @@ def plot_A(patch, layers, mats_outputs_collection, scene,
                             color=colors[i], linewidth=FUTURE_LINE_WIDTH / 2, zorder=650, alpha=0.5)
 
                 # Current Node Position
+                alpha_weight = mean_normed_magnitude[node_idx]
                 circle = plt.Circle((history[-1, 0],
                                      history[-1, 1]),
                                     NODE_CIRCLE_SIZE,
-                                    facecolor='g',
+                                    facecolor='red',
                                     edgecolor='k',
                                     lw=CIRCLE_EDGE_WIDTH,
-                                    zorder=3)
+                                    zorder=3, alpha=0.7 * alpha_weight)
                 ax.add_artist(circle)
 
         if robot_plan is not None:
@@ -700,7 +714,7 @@ def plot_A(patch, layers, mats_outputs_collection, scene,
         path = plot_path + 'A_Connection'
         if not os.path.isdir(path):
             os.mkdir(path)
-        fig.savefig(path + '/t_' + str(t) + '.png', dpi=600, bbox_inches='tight')
+        fig.savefig(path + '/t_' + str(t) + '.png', dpi=300, bbox_inches='tight')
         fig.savefig(path + '/t_' + str(t) + '.svg', bbox_inches='tight')
 
 

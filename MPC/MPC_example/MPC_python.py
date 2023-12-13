@@ -29,8 +29,8 @@ env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_train_v
 # env = load_data_set("/home/zxc/codes/MATS/experiments/processed/nuScenes_val_full_doubled.pkl")
 
 # Raw data for plots
-# nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
-nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
+nuScenes_data_path = '/home/zxc/codes/MATS/experiments/nuScenes/data'  # for home
+# nuScenes_data_path = '/home/zxc/Downloads/nuscene'  # for 423
 
 # load model
 mats, hyperparams = load_model('../../experiments/nuScenes/models'
@@ -107,10 +107,10 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False,
     if my_patch is None:
         x_center = robot_node.x[t_range[0]]
         y_center = robot_node.y[t_range[0]]
-        x_min = x_center - 25.0
-        y_min = y_center - 55.0
-        x_max = x_center + 75.0
-        y_max = y_center + 55.0
+        x_min = x_center - 50.0
+        y_min = y_center - 50.0
+        x_max = x_center + 50.0
+        y_max = y_center + 50.0
 
         my_patch = (x_min, y_min, x_max, y_max)
 
@@ -221,6 +221,8 @@ def run_mpc(scene_num=None, planner=None, save_meta=False, plot_fig=False,
 
     " ==== Visualize Results ==== "
     if plot_fig:
+        if planner is not None:
+            plot_path = plot_path + '/' + planner
         # Plot predicted timestep
         plotting_helper.plot_multi_frame_dist(my_patch, layers, mats_outputs_collection, scene, nusc_map=nusc_map,
                                               max_hl=max_hl, ph=prediction_horizon, x_min=scene.x_min,
@@ -303,18 +305,20 @@ if __name__ == '__main__':
     progress_in_plans_collection = []
 
     " ==== Single-Scene Running ==== "
-    # train_val_full_doubled 16: many pedestrian t=(2,24)  ROI=[870, 1590, 930, 1640]
     # val_full_doubled 23: cross interaction t=(2,18)  ROI=None
+    # train_val_full_doubled 16: many pedestrian t=(2,24)  ROI=[870, 1590, 930, 1640]
 
-    # scene_id = 23
-    # run_mpc(scene_num=scene_id, plot_fig=True, t_range=range(2, 18),
-    #         my_patch=None,
-    #         plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
+    scene_id = 42
+    # planner_type = 'Single-Obstacle'
+    run_mpc(scene_num=scene_id, plot_fig=True,
+            my_patch=None, planner=None, t_range=range(2, 20),
+            plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
+    # [57, 61, 62, 73, 74, 85, 92]
 
-    scene_id = {7, 16, 18, 30, 39, 57, 61, 62, 73, 74, 85, 92, 96}
-    for idx in scene_id:
-        run_mpc(scene_num=idx, plot_fig=True,
-                plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
+    # scene_id = 57
+    # for idx in scene_id:
+    #     run_mpc(scene_num=idx, plot_fig=True,
+    #             plot_path='/home/zxc/codes/MATS/MPC/MPC_example/plots')
 
     " ==== Multi-Scene Running ==== "
     # # planner_type = 'MPC-5-Iteration'  # change the iteration number accordingly
